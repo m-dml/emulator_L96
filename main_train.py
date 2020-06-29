@@ -54,7 +54,7 @@ fn_model = f'{exp_id}_FOV5_dt{temporal_offset}.pt'
 
 #model = TinyNetwork(n_filters_ks3 = [128, 128], padding_mode='circular')
 model = TinyNetwork(n_filters_ks3 = [128, 128], 
-                    n_filters_ks1=[[128, 128], [128, 128], [128, 128]],
+                    #n_filters_ks1=[[128, 128], [128, 128], [128, 128]],
                     padding_mode='circular')
 
 test_input = np.random.normal(size=(10, 1, 36))

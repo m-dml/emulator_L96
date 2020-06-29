@@ -1,5 +1,5 @@
 import torch
-import numpy
+import numpy as np
 
 class Dataset(torch.utils.data.IterableDataset):
     def __init__(self, data, offset=1, 
