@@ -2,11 +2,14 @@ import torch
 import numpy as np
 
 class Dataset(torch.utils.data.IterableDataset):
-    def __init__(self, data, offset=1, 
+    def __init__(self, data, offset=1, J=0,
                  start=None, end=None, 
                  normalize=False, randomize_order=True):
 
         self.data = data.copy()
+
+        self.J, self.K = J, data.shape[1]//(J+1)
+        assert data.shape[1]/(J+1) == self.K
 
         self.offset = offset
         if start is None or end is None:
@@ -25,7 +28,8 @@ class Dataset(torch.utils.data.IterableDataset):
 
     def __getitem__(self, index):
         """ Generate one batch of data """
-        return np.atleast_2d(self.data[np.asarray(index),:])
+        idx = np.atleast_1d(np.asarray(index))
+        return self.data[idx,:].reshape(len(idx), self.J+1, self.K)
 
     def __iter__(self):
         """ Return iterable over data in random order """
@@ -35,8 +39,8 @@ class Dataset(torch.utils.data.IterableDataset):
         else: 
             idx = torch.arange(iter_start, iter_end, requires_grad=False, device='cpu')
 
-        X = self.data[idx,:].reshape(len(idx), 1, -1)
-        y = self.data[idx+self.offset,:].reshape(len(idx), 1, -1)
+        X = self.data[idx,:].reshape(len(idx), self.J+1, self.K)
+        y = self.data[idx+self.offset,:].reshape(len(idx), self.J+1, self.K)
 
         return zip(X, y)
 

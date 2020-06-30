@@ -20,9 +20,9 @@ dtype = torch.float32
 
 print(device)
 
-exp_id = 'V1'
+exp_id = 'V2'
 
-K,J = 36, 0
+K,J = 36, 10
 T, dt = 605, 0.001
 temporal_offset = 1
 batch_size = 32
@@ -32,10 +32,10 @@ fn_data = f'out_K{K}_J{J}_T{T}'
 out = np.load(res_dir + 'data/' + fn_data + '.npy')
 print('data.shape', out.shape)
 
-dg_train = Dataset(data=out, offset=temporal_offset, normalize=True, 
+dg_train = Dataset(data=out, J=J, offset=temporal_offset, normalize=True, 
                    start=T_burnin, 
                    end=int(np.floor(out.shape[0]*0.8)))
-dg_val   = Dataset(data=out, offset=temporal_offset, normalize=True, 
+dg_val   = Dataset(data=out, J=J, offset=temporal_offset, normalize=True, 
                    start=int(np.ceil(out.shape[0]*0.8)), 
                    end=int(np.floor(out.shape[0]*0.9)))
 
@@ -54,10 +54,12 @@ fn_model = f'{exp_id}_FOV5_dt{temporal_offset}.pt'
 
 #model = TinyNetwork(n_filters_ks3 = [128, 128], padding_mode='circular')
 model = TinyResNet(n_filters_ks3 = [128, 128], 
-                    #n_filters_ks1=[[128, 128, 128], [128, 128, 128], [128, 128, 128]],
+                    n_channels_in = J+1,
+                    n_channels_out = J+1,
+                    n_filters_ks1=[[128, 128, 128], [128, 128, 128], [128, 128, 128]],
                     padding_mode='circular')
 
-test_input = np.random.normal(size=(10, 1, 36))
+test_input = np.random.normal(size=(10, J+1, 36))
 print(f'model output shape to test input of shape {test_input.shape}', 
       model.forward(torch.as_tensor(test_input, device=device, dtype=dtype)).shape)
 
