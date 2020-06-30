@@ -6,10 +6,10 @@ class Dataset(torch.utils.data.IterableDataset):
                  start=None, end=None, 
                  normalize=False, randomize_order=True):
 
-        self.data = data.copy()
-
-        self.J, self.K = J, data.shape[1]//(J+1)
-        assert data.shape[1]/(J+1) == self.K
+        if len(data.shape) == 2:
+            self.J, self.K = J, data.shape[1]//(J+1)
+            assert data.shape[1]/(J+1) == self.K
+            self.data = data.copy().reshape(-1, self.J+1, self.K)
 
         self.offset = offset
         if start is None or end is None:
@@ -20,8 +20,8 @@ class Dataset(torch.utils.data.IterableDataset):
         self.normalize = normalize
         self.mean, self.std = 0., 1.
         if self.normalize:
-            self.mean = self.data.mean(axis=0).reshape(1,-1)
-            self.std = self.data.std(axis=0).reshape(1,-1)
+            self.mean = self.data.mean(axis=(0,2)).reshape(1,-1,1)
+            self.std = self.data.std(axis=(0,2)).reshape(1,-1,1)
             self.data = (self.data - self.mean) / self.std 
 
         self.randomize_order = randomize_order
@@ -29,7 +29,7 @@ class Dataset(torch.utils.data.IterableDataset):
     def __getitem__(self, index):
         """ Generate one batch of data """
         idx = np.atleast_1d(np.asarray(index))
-        return self.data[idx,:].reshape(len(idx), self.J+1, self.K)
+        return self.data[idx]
 
     def __iter__(self):
         """ Return iterable over data in random order """
@@ -39,8 +39,8 @@ class Dataset(torch.utils.data.IterableDataset):
         else: 
             idx = torch.arange(iter_start, iter_end, requires_grad=False, device='cpu')
 
-        X = self.data[idx,:].reshape(len(idx), self.J+1, self.K)
-        y = self.data[idx+self.offset,:].reshape(len(idx), self.J+1, self.K)
+        X = self.data[idx,:]
+        y = self.data[idx+self.offset,:]
 
         return zip(X, y)
 
