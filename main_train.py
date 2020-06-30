@@ -10,7 +10,7 @@ from src.pytorch.layers import setup_conv, ResNetBlock, PeriodicConv2D
 from src.pytorch.util import init_torch_device
 
 from L96_emulator.dataset import Dataset
-from L96_emulator.networks import TinyNetwork
+from L96_emulator.networks import TinyNetwork, TinyResNet
 from src.pytorch.train import train_model
 
 res_dir = '/gpfs/work/nonnenma/results/emulators/L96/'
@@ -20,7 +20,7 @@ dtype = torch.float32
 
 print(device)
 
-exp_id = 'V0'
+exp_id = 'V1'
 
 K,J = 36, 0
 T, dt = 605, 0.001
@@ -53,8 +53,8 @@ save_dir = res_dir + 'models/' + exp_id + '/'
 fn_model = f'{exp_id}_FOV5_dt{temporal_offset}.pt'
 
 #model = TinyNetwork(n_filters_ks3 = [128, 128], padding_mode='circular')
-model = TinyNetwork(n_filters_ks3 = [128, 128], 
-                    #n_filters_ks1=[[128, 128], [128, 128], [128, 128]],
+model = TinyResNet(n_filters_ks3 = [128, 128], 
+                    #n_filters_ks1=[[128, 128, 128], [128, 128, 128], [128, 128, 128]],
                     padding_mode='circular')
 
 test_input = np.random.normal(size=(10, 1, 36))

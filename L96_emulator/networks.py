@@ -21,11 +21,12 @@ class TinyNetwork(torch.nn.Module):
     def __init__(self, n_filters_ks3, n_filters_ks1 = None, n_channels_in = 1, n_channels_out = 1, padding_mode='zeros'):
         
         kernel_size = 3
+
+        super(TinyNetwork, self).__init__()
         
         self.n_filters_ks1 = [ [] for i in range(len(n_filters_ks3)+1) ] if n_filters_ks1 is None else n_filters_ks1
         assert len(self.n_filters_ks1) == len(n_filters_ks3) + 1
 
-        super(TinyNetwork, self).__init__()
         n_in = n_channels_in
         self.layers3x3 = []            
         self.layers_ks1 = [ [] for i in range(len(self.n_filters_ks1))]
@@ -56,8 +57,9 @@ class TinyNetwork(torch.nn.Module):
             n_in = n_out
             
         self.layers3x3 = torch.nn.ModuleList(self.layers3x3)
-        self.layers_ks1 = [torch.nn.ModuleList(layers) for layers in self.layers_ks1]
-
+        #self.layers_ks1 = [torch.nn.ModuleList(layers) for layers in self.layers_ks1]
+        self.layers1x1 = sum(self.layers_ks1, [])
+        self.layers1x1 = torch.nn.ModuleList(self.layers1x1)
         self.final = torch.nn.Conv1d(in_channels=n_in,
                                      out_channels=n_channels_out,
                                      kernel_size= 1)
@@ -73,3 +75,23 @@ class TinyNetwork(torch.nn.Module):
                 x = self.nonlinearity(layer(x))
                 
         return self.final(x)
+
+class TinyResNet(TinyNetwork):
+
+#    def __init__(self, n_filters_ks3, n_filters_ks1 = None, n_channels_in = 1, n_channels_out = 1, padding_mode='zeros'):
+#        super(TinyResNet, self).__init__(n_filters_ks3, n_filters_ks1, n_channels_in, n_channels_out, padding_mode)
+
+    def forward(self, x):
+
+        out = x
+
+        for layer in self.layers_ks1[0]:
+            x = self.nonlinearity(layer(x))
+        #out += x # outcomment for initial residual block
+
+        for i, layer3x3 in enumerate(self.layers3x3):
+            x = self.nonlinearity(layer3x3(x))
+            for layer in self.layers_ks1[i+1]:
+                x = self.nonlinearity(layer(x))
+
+        return self.final(x) + out
