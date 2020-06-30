@@ -18,9 +18,7 @@ res_dir = '/gpfs/work/nonnenma/results/emulators/L96/'
 device = init_torch_device()
 dtype = torch.float32
 
-print(device)
-
-exp_id = 'V2_1'
+exp_id = 'V3'
 
 K,J = 36, 10
 T, dt = 605, 0.001
@@ -52,8 +50,8 @@ train_loader = torch.utils.data.DataLoader(
 save_dir = res_dir + 'models/' + exp_id + '/'
 fn_model = f'{exp_id}_FOV5_dt{temporal_offset}.pt'
 
-#model = TinyNetwork(n_filters_ks3 = [128, 128], padding_mode='circular')
-model = TinyResNet(n_filters_ks3 = [128, 128], 
+#model = TinyResNet(n_filters_ks3 = [128, 128], padding_mode='circular')
+model = TinyNetwork(n_filters_ks3 = [128, 128], 
                     n_channels_in = J+1,
                     n_channels_out = J+1,
                     n_filters_ks1=[[128, 128, 128], [128, 128, 128], [128, 128, 128]],

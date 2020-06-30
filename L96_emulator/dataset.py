@@ -40,7 +40,7 @@ class Dataset(torch.utils.data.IterableDataset):
             idx = torch.arange(iter_start, iter_end, requires_grad=False, device='cpu')
 
         X = self.data[idx,:]
-        y = self.data[idx+self.offset,:]
+        y = self.data[idx+self.offset,:] - self.data[idx,:]
 
         return zip(X, y)
 
