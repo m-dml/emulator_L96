@@ -20,7 +20,7 @@ dtype = torch.float32
 
 print(device)
 
-exp_id = 'V2'
+exp_id = 'V2_1'
 
 K,J = 36, 10
 T, dt = 605, 0.001
@@ -62,6 +62,7 @@ model = TinyResNet(n_filters_ks3 = [128, 128],
 test_input = np.random.normal(size=(10, J+1, 36))
 print(f'model output shape to test input of shape {test_input.shape}', 
       model.forward(torch.as_tensor(test_input, device=device, dtype=dtype)).shape)
+print('total #parameters: ', np.sum([np.prod(item.shape) for item in model.state_dict().values()]))
 
 loss_fun = torch.nn.functional.mse_loss
 
