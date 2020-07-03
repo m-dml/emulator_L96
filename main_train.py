@@ -23,7 +23,7 @@ def mkdir_p(dir):
 device = init_torch_device()
 dtype = torch.float32
 
-exp_id = 'V8'
+exp_id = 'V9'
 
 K,J = 36, 10
 T, dt = 605, 0.001
@@ -57,13 +57,13 @@ mkdir_p(save_dir)
 fn_model = f'{exp_id}_FOV5_dt{temporal_offset}.pt'
 
 #model = TinyResNet(n_filters_ks3 = [128, 128], padding_mode='circular')
-model = TinyNetwork(n_filters_ks3 = [128, 128, 128, 128], 
-                    n_channels_in = J+1,
+model = TinyResNet(n_filters_ks3 = [128, 128, 128, 128], 
+                    n_channels_in = 2*(J+1),
                     n_channels_out = J+1,
                     #n_filters_ks1=[[128, 128], [128, 128], [128, 128], [128, 128], [128, 128]],
                     padding_mode='circular')
 
-test_input = np.random.normal(size=(10, J+1, 36))
+test_input = np.random.normal(size=(10, 2*(J+1), 36))
 print(f'model output shape to test input of shape {test_input.shape}', 
       model.forward(torch.as_tensor(test_input, device=device, dtype=dtype)).shape)
 print('total #parameters: ', np.sum([np.prod(item.shape) for item in model.state_dict().values()]))

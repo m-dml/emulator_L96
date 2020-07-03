@@ -211,7 +211,7 @@ class DatasetRelPred(torch.utils.data.IterableDataset):
         else: 
             idx = torch.arange(iter_start, iter_end, requires_grad=False, device='cpu')
 
-        X = self.data[idx,:]
+        X = np.concatenate((self.data[idx,:], self.data[idx,:]-self.data[idx-self.offset,:]), axis=1)
         y = (self.data[idx+self.offset,:] - self.data[idx,:] - self.mean_out) / self.std_out
 
         return zip(X, y)

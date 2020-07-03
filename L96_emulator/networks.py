@@ -83,7 +83,11 @@ class TinyResNet(TinyNetwork):
 
     def forward(self, x):
 
-        out = x
+        n_channels_in = x.shape[1]
+        #print('n_channels_in:', n_channels_in)
+        #print('x.shape', x.shape)
+        assert n_channels_in//2 == n_channels_in/2
+        out = x[:, n_channels_in//2:]
 
         for layer in self.layers_ks1[0]:
             x = self.nonlinearity(layer(x))
