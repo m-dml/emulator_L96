@@ -9,16 +9,21 @@ if module_path not in sys.path:
 from src.pytorch.layers import setup_conv, ResNetBlock, PeriodicConv2D
 from src.pytorch.util import init_torch_device
 
-from L96_emulator.dataset import Dataset
+from L96_emulator.dataset import DatasetRelPred
 from L96_emulator.networks import TinyNetwork, TinyResNet
 from src.pytorch.train import train_model
 
 res_dir = '/gpfs/work/nonnenma/results/emulators/L96/'
 
+def mkdir_p(dir):
+    '''make a directory (dir) if it doesn't exist'''
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+
 device = init_torch_device()
 dtype = torch.float32
 
-exp_id = 'V7'
+exp_id = 'V8'
 
 K,J = 36, 10
 T, dt = 605, 0.001
@@ -30,10 +35,10 @@ fn_data = f'out_K{K}_J{J}_T{T}'
 out = np.load(res_dir + 'data/' + fn_data + '.npy')
 print('data.shape', out.shape)
 
-dg_train = Dataset(data=out, J=J, offset=temporal_offset, normalize=True, 
+dg_train = DatasetRelPred(data=out, J=J, offset=temporal_offset, normalize=True, 
                    start=T_burnin, 
                    end=int(np.floor(out.shape[0]*0.8)))
-dg_val   = Dataset(data=out, J=J, offset=temporal_offset, normalize=True, 
+dg_val   = DatasetRelPred(data=out, J=J, offset=temporal_offset, normalize=True, 
                    start=int(np.ceil(out.shape[0]*0.8)), 
                    end=int(np.floor(out.shape[0]*0.9)))
 
@@ -48,13 +53,14 @@ train_loader = torch.utils.data.DataLoader(
 )
 
 save_dir = res_dir + 'models/' + exp_id + '/'
+mkdir_p(save_dir)
 fn_model = f'{exp_id}_FOV5_dt{temporal_offset}.pt'
 
 #model = TinyResNet(n_filters_ks3 = [128, 128], padding_mode='circular')
-model = TinyResNet(n_filters_ks3 = [128, 128, 128, 128], 
+model = TinyNetwor(n_filters_ks3 = [128, 128, 128, 128], 
                     n_channels_in = J+1,
                     n_channels_out = J+1,
-                    n_filters_ks1=[[128, 128], [128, 128], [128, 128], [128, 128], [128, 128]],
+                    #n_filters_ks1=[[128, 128], [128, 128], [128, 128], [128, 128], [128, 128]],
                     padding_mode='circular')
 
 test_input = np.random.normal(size=(10, J+1, 36))
