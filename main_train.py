@@ -18,7 +18,7 @@ res_dir = '/gpfs/work/nonnenma/results/emulators/L96/'
 device = init_torch_device()
 dtype = torch.float32
 
-exp_id = 'V3'
+exp_id = 'V7'
 
 K,J = 36, 10
 T, dt = 605, 0.001
@@ -51,10 +51,10 @@ save_dir = res_dir + 'models/' + exp_id + '/'
 fn_model = f'{exp_id}_FOV5_dt{temporal_offset}.pt'
 
 #model = TinyResNet(n_filters_ks3 = [128, 128], padding_mode='circular')
-model = TinyNetwork(n_filters_ks3 = [128, 128], 
+model = TinyResNet(n_filters_ks3 = [128, 128, 128, 128], 
                     n_channels_in = J+1,
                     n_channels_out = J+1,
-                    n_filters_ks1=[[128, 128, 128], [128, 128, 128], [128, 128, 128]],
+                    n_filters_ks1=[[128, 128], [128, 128], [128, 128], [128, 128], [128, 128]],
                     padding_mode='circular')
 
 test_input = np.random.normal(size=(10, J+1, 36))
