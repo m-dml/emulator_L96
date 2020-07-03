@@ -201,7 +201,7 @@ class DatasetRelPred(torch.utils.data.IterableDataset):
     def __getitem__(self, index):
         """ Generate one batch of data """
         idx = np.atleast_1d(np.asarray(index))
-        return (self.data[idx], (self.data[idx+self.offset,:] - self.data[idx,:] - self.mean_out) / self.std_out)
+        return self.data[idx] #, (self.data[idx+self.offset,:] - self.data[idx,:] - self.mean_out) / self.std_out
 
     def __iter__(self):
         """ Return iterable over data in random order """
