@@ -1,5 +1,31 @@
 import torch
 import torch.nn.functional as F
+import numpy as np
+
+def named_network(model_name, n_input_channels, n_output_channels, seq_length, **kwargs):
+
+    if model_name in ['TinyNetwork', 'TinyResNet']:
+
+        assert seq_length == 1
+        assert np.all([i == 3 for i in kwargs['kernel_sizes']])
+
+        n_filters_ks3 = kwargs['filters']
+        n_filters_ks1 = [kwargs['filters_ks1_inter'] for i in range(len(n_filters_ks3)-1)]
+        n_filters_ks1 = [kwargs['filters_ks1_init']] + n_filters_ks1 + [kwargs['filters_ks1_final']]
+
+        Network = TinyNetwork if model_name == 'TinyNetwork' else TinyResNet
+        model = Network(n_filters_ks3=n_filters_ks3, 
+                        n_filters_ks1=n_filters_ks1, 
+                        n_channels_in=seq_length * n_input_channels, 
+                        n_channels_out=n_output_channels, 
+                        padding_mode='circular')
+
+        def model_forward(input):
+            return model.forward(input)
+
+
+    return model, model_forward
+
 
 class PeriodicConv1D(torch.nn.Conv1d):
     """ Implementing 1D convolutional layer with circular padding.
@@ -84,10 +110,9 @@ class TinyResNet(TinyNetwork):
     def forward(self, x):
 
         n_channels_in = x.shape[1]
-        #print('n_channels_in:', n_channels_in)
-        #print('x.shape', x.shape)
-        assert n_channels_in//2 == n_channels_in/2
-        out = x[:, n_channels_in//2:]
+        out = x
+        #assert n_channels_in//2 == n_channels_in/2
+        #out = x[:, n_channels_in//2:]
 
         for layer in self.layers_ks1[0]:
             x = self.nonlinearity(layer(x))

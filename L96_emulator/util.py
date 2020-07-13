@@ -1,4 +1,16 @@
 import numpy as np
+import torch
+
+def init_torch_device():
+    if torch.cuda.is_available():
+        print('using CUDA !')
+        device = torch.device("cuda")
+        torch.set_default_tensor_type("torch.cuda.FloatTensor")
+    else:
+        print("CUDA not available")
+        device = torch.device("cpu")
+        torch.set_default_tensor_type("torch.FloatTensor")
+    return device
 
 def predictor_corrector(fun, y0, times, alpha=0.5):
 
