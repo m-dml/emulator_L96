@@ -2,7 +2,7 @@ exp_id: testnet_test
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
 K: 36
-J: 3
+J: 4
 T: 605
 dt: 0.001
 prediction_task: state
@@ -16,9 +16,9 @@ batch_size: 32
 dropout_rate: 0.0
 lr: 1e-4
 lr_min: 1e-6
-lr_decay: 0.2
+lr_decay: 0.1
 weight_decay: 0.
-max_lr_patience: 20
+max_lr_patience: 10
 max_patience: 50
 eval_every: 2000
 max_epochs: 200
