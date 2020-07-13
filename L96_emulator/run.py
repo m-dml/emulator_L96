@@ -15,10 +15,23 @@ if module_path not in sys.path:
 from src.pytorch.train import train_model, loss_function
 
 import os
-def mkdir_p(dir):
+def mkdir_from_path(dir):
     '''make a directory (dir) if it doesn't exist'''
     if not os.path.exists(dir):
         os.mkdir(dir)
+
+def sel_dataset_class(prediction_task):
+
+    if prediction_task == 'state':
+        DatasetClass = Dataset
+    elif prediction_task == 'update':
+        DatasetClass = DatasetRelPred
+    elif prediction_task == 'update_with_past':
+        DatasetClass = DatasetRelPredPast
+    else:
+        raise NotImplementedError()
+
+    return DatasetClass
 
 def run_exp(exp_id, datadir, res_dir,
             K, J, T, dt,
@@ -39,15 +52,7 @@ def run_exp(exp_id, datadir, res_dir,
     print('data.shape', out.shape)
     assert (out.shape[0]-1)*dt == T
 
-    if prediction_task == 'state':
-        DatasetClass = Dataset
-    elif prediction_task == 'update':
-        DatasetClass = DatasetRelPred
-    elif prediction_task == 'update_with_past':
-        DatasetClass = DatasetRelPredPast
-    else:
-        raise NotImplementedError()
-
+    DatasetClass = sel_dataset_class(prediction_task)
     test_frac = 1. - (train_frac + validation_frac)
     assert test_frac > 0.
     spin_up = int(spin_up_time/dt)
@@ -80,9 +85,9 @@ def run_exp(exp_id, datadir, res_dir,
                                          seq_length=seq_length,
                                          **net_kwargs)
 
-    test_input = np.random.normal(size=(10, seq_length*(J+1), 36))
+    test_input = np.random.normal(size=(10, seq_length*(J+1), K))
     print(f'model output shape to test input of shape {test_input.shape}', 
-          model.forward(torch.as_tensor(test_input, device=device, dtype=dtype)).shape)
+          model_forward(torch.as_tensor(test_input, device=device, dtype=dtype)).shape)
     print('total #parameters: ', np.sum([np.prod(item.shape) for item in model.state_dict().values()]))
 
     ## train model
@@ -93,7 +98,7 @@ def run_exp(exp_id, datadir, res_dir,
 
     else: # actually train
 
-        mkdir_p(save_dir)
+        mkdir_from_path(save_dir)
         print('saving model state_dict to ' + save_dir + model_fn)
         open(save_dir + commit_id + '.txt', 'w')
 
