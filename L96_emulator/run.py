@@ -3,16 +3,10 @@ import torch
 from .util import init_torch_device
 from .networks import named_network
 from .dataset import Dataset, DatasetRelPred, DatasetRelPredPast
+from .train import train_model, loss_function
 from configargparse import ArgParser
 import ast
 import subprocess
-
-import os
-import sys
-module_path = os.path.abspath(os.path.join('/gpfs/home/nonnenma/projects/seasonal_forecasting/code/weatherbench'))
-if module_path not in sys.path:
-    sys.path.append(module_path)
-from src.pytorch.train import train_model, loss_function
 
 import os
 def mkdir_from_path(dir):
@@ -102,18 +96,17 @@ def run_exp(exp_id, datadir, res_dir,
         print('saving model state_dict to ' + save_dir + model_fn)
         open(save_dir + commit_id + '.txt', 'w')
 
+        output_fn = '_training_outputs'
+
         loss_fun = loss_function(loss_fun, extra_args={})
         training_outputs = train_model(
             model, train_loader, validation_loader, device, model_forward, loss_fun=loss_fun,
             weight_decay=weight_decay, max_epochs=max_epochs, max_patience=max_patience, 
             lr=lr, lr_min=lr_min, lr_decay=lr_decay, max_lr_patience=max_lr_patience,
-            eval_every=eval_every, verbose=True, save_dir=save_dir + model_fn
+            eval_every=eval_every, verbose=True, save_dir=save_dir, model_fn=model_fn, output_fn=output_fn
         )
         print('saving full model to ' + save_dir+model_fn[:-3] + '_full_model.pt')
         torch.save(model, save_dir+model_fn[:-3] + '_full_model.pt')
-        print('saving training outputs to ' + save_dir +  '_training_outputs.npy')
-        np.save(save_dir + '_training_outputs', training_outputs)
-
 
     # evaluate model
 
