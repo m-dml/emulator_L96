@@ -1,6 +1,7 @@
 import torch
 import numpy as np
-   
+from .util import sortL96intoChannels
+
 class Dataset(torch.utils.data.IterableDataset):
     def __init__(self, data, offset=1, J=0,
                  start=None, end=None, 
@@ -9,7 +10,7 @@ class Dataset(torch.utils.data.IterableDataset):
         if len(data.shape) == 2:
             self.J, self.K = J, data.shape[1]//(J+1)
             assert data.shape[1]/(J+1) == self.K
-            self.data = data.copy().reshape(-1, self.J+1, self.K)
+            self.data = sortL96intoChannels(data, J)
 
         self.offset = offset
         if start is None or end is None:

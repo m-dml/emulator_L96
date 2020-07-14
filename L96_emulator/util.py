@@ -12,6 +12,24 @@ def init_torch_device():
         torch.set_default_tensor_type("torch.FloatTensor")
     return device
 
+def sortL96intoChannels(x, J):
+
+    assert x.ndim == 2
+    K = x.shape[1]//(J+1)
+    assert x.shape[1]/(J+1) == K
+
+    out = np.concatenate((x[:,:K].reshape(-1,K,1), x[:,K:].reshape(-1, K, J)),
+                         axis=2).transpose(0,2,1)
+    return out
+
+def sortL96fromChannels(x):
+
+    assert x.ndim == 3
+    J, K = x.shape[1]-1,  x.shape[2]
+
+    out = np.concatenate((x[:,0,:], x[:,1:,:].transpose(0,2,1).reshape(-1, K*J)), axis=1)
+    return out
+
 def predictor_corrector(fun, y0, times, alpha=0.5):
 
     y = np.zeros((len(times), *y0.shape))
