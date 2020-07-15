@@ -26,7 +26,7 @@ model_name: ResNet
 filters: [128, 128, 128, 128]
 kernel_sizes: [3, 3, 3, 3]
 filters_ks1_init: [128]
-filters_ks1_inter: [128, ,128]
+filters_ks1_inter: [128, 128]
 filters_ks1_final: [128]
 additiveResShortcuts: False
 direct_shortcut: True
