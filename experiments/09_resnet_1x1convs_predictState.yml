@@ -1,4 +1,4 @@
-exp_id: resnet_1x1convs_predictState_J10_stackingResBlocks_shallow
+exp_id: resnet_1x1convs_predictState_J10_stackingResBlocksDirect_shallow
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
 K: 36
