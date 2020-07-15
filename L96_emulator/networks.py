@@ -32,12 +32,14 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
         n_filters_ks1 = [kwargs['filters_ks1_inter'] for i in range(len(n_filters_ks3)-1)]
         n_filters_ks1 = [kwargs['filters_ks1_init']] + n_filters_ks1 + [kwargs['filters_ks1_final']]
 
+        additiveResShortcuts = kwargs['additiveResShortcuts']
+        additiveResShortcuts = None if additiveResShortcuts == 'None' else additiveResShortcuts 
         model = ResNet(n_filters_ks3=n_filters_ks3, 
                        n_filters_ks1=n_filters_ks1, 
                        n_channels_in=seq_length * n_input_channels, 
                        n_channels_out=n_output_channels, 
                        padding_mode='circular',
-                       additive=kwargs['additiveResShortcuts'])
+                       additive=additiveResShortcuts)
 
         def model_forward(input):
             return model.forward(input)
