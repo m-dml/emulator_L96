@@ -44,7 +44,7 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
                        n_channels_in=seq_length * n_input_channels, 
                        n_channels_out=n_output_channels, 
                        padding_mode='circular',
-                       additive=additiveResShortcuts
+                       additive=additiveResShortcuts,
                        direct_shortcut=direct_shortcut)
 
         def model_forward(input):
