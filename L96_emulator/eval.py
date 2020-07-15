@@ -37,7 +37,8 @@ def load_model_from_exp_conf(res_dir, conf):
             'filters_ks1_init': conf['filters_ks1_init'],
             'filters_ks1_inter': conf['filters_ks1_inter'],
             'filters_ks1_final': conf['filters_ks1_final'],
-            'additiveResShortcuts' : conf['additiveResShortcuts']
+            'additiveResShortcuts' : conf['additiveResShortcuts'],
+            'direct_shortcut' : conf['direct_shortcut']
     }
 
     model, model_forward = named_network(model_name=conf['model_name'], 

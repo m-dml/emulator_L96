@@ -37,12 +37,15 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
         additiveResShortcuts = False if additiveResShortcuts == 'False' else additiveResShortcuts 
         additiveResShortcuts = True if additiveResShortcuts == 'True' else additiveResShortcuts 
 
+        direct_shortcut = kwargs['direct_shortcut']
+
         model = ResNet(n_filters_ks3=n_filters_ks3, 
                        n_filters_ks1=n_filters_ks1, 
                        n_channels_in=seq_length * n_input_channels, 
                        n_channels_out=n_output_channels, 
                        padding_mode='circular',
-                       additive=additiveResShortcuts)
+                       additive=additiveResShortcuts
+                       direct_shortcut=direct_shortcut)
 
         def model_forward(input):
             return model.forward(input)
