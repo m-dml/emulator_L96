@@ -192,7 +192,7 @@ class ResNetBlock(torch.nn.Module):
 class ResNet(torch.nn.Module):
     
     def __init__(self, n_filters_ks3, n_filters_ks1=None, n_channels_in=1, n_channels_out=1, 
-                 padding_mode='zeros', additive=None):
+                 padding_mode='zeros', additive=None, direct_shortcut=False):
         
         kernel_size = 3
 
@@ -200,6 +200,8 @@ class ResNet(torch.nn.Module):
         
         self.n_filters_ks1 = [ [] for i in range(len(n_filters_ks3)+1) ] if n_filters_ks1 is None else n_filters_ks1
         assert len(self.n_filters_ks1) == len(n_filters_ks3) + 1
+        
+        self.direct_shortcut = direct_shortcut
 
         n_in = n_channels_in
         self.layers3x3 = []            
@@ -243,14 +245,20 @@ class ResNet(torch.nn.Module):
     
     def forward(self, x):
 
+        if self.direct_shortcut:
+            out = x
+        
         for layer in self.layers_ks1[0]:
             x = self.nonlinearity(layer(x))        
         for i, layer3x3 in enumerate(self.layers3x3):
             x = self.nonlinearity(layer3x3(x))
             for layer in self.layers_ks1[i+1]:
                 x = self.nonlinearity(layer(x))
-                
-        return self.final(x)
+
+        if self.direct_shortcut:
+            return self.final(x) + out
+        else:
+            return self.final(x)
 
     
 class TinyNetwork(torch.nn.Module):

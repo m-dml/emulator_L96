@@ -153,6 +153,7 @@ def setup(conf_exp=None):
     p.add_argument('--filters_ks1_inter', type=int, nargs='+', required=False, help='intermediate 1x1 convs for network')
     p.add_argument('--filters_ks1_final', type=int, nargs='+', required=False, help='final 1x1 convs for network')
     p.add_argument('--additiveResShortcuts', default=None, help='boolean or None, if ResNet shortcuts are additive')
+    p.add_argument('--direct_shortcut', type=bool, default=False, help='if model has direct input-output residual connection')
     p.add_argument('--weight_decay', type=float, default=0., help='weight decay (L2 norm)')
     p.add_argument('--dropout_rate', type=float, default=0, help='Dropout')
 
