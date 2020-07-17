@@ -37,15 +37,21 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
         additiveResShortcuts = False if additiveResShortcuts == 'False' else additiveResShortcuts 
         additiveResShortcuts = True if additiveResShortcuts == 'True' else additiveResShortcuts 
 
-        direct_shortcut = kwargs['direct_shortcut']
-
+        normLayers = {'BN' : torch.nn.BatchNorm1d,
+                      'ID' : torch.nn.Identity(),
+                      torch.nn.BatchNorm2d : torch.nn.BatchNorm1d,
+                      torch.nn.Identity() : torch.nn.Identity()
+                     }                   
+        
         model = ResNet(n_filters_ks3=n_filters_ks3, 
                        n_filters_ks1=n_filters_ks1, 
                        n_channels_in=seq_length * n_input_channels, 
                        n_channels_out=n_output_channels, 
                        padding_mode='circular',
+                       layerNorm=normLayers[kwargs['layerNorm']],
+                       dropout=kwargs['dropout_rate'],
                        additive=additiveResShortcuts,
-                       direct_shortcut=direct_shortcut)
+                       direct_shortcut=kwargs['direct_shortcut'])
 
         def model_forward(input):
             return model.forward(input)
@@ -195,7 +201,8 @@ class ResNetBlock(torch.nn.Module):
 class ResNet(torch.nn.Module):
     
     def __init__(self, n_filters_ks3, n_filters_ks1=None, n_channels_in=1, n_channels_out=1, 
-                 padding_mode='zeros', additive=None, direct_shortcut=False):
+                 padding_mode='zeros', additive=None, direct_shortcut=False,
+                 layerNorm=torch.nn.BatchNorm1d, dropout=0.0):
         
         kernel_size = 3
 
@@ -218,9 +225,9 @@ class ResNet(torch.nn.Module):
                                     hidden_channels=None, 
                                     out_channels= n_out,
                                     bias=True, 
-                                    layerNorm=torch.nn.BatchNorm1d,
+                                    layerNorm=layerNorm,
                                     padding_mode='circular', 
-                                    dropout=0.1, 
+                                    dropout=dropout, 
                                     activation="relu",
                                     additive=additive)                
                 self.layers_ks1[i].append(block)

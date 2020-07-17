@@ -155,7 +155,8 @@ def setup(conf_exp=None):
     p.add_argument('--additiveResShortcuts', default=None, help='boolean or None, if ResNet shortcuts are additive')
     p.add_argument('--direct_shortcut', type=bool, default=False, help='if model has direct input-output residual connection')
     p.add_argument('--weight_decay', type=float, default=0., help='weight decay (L2 norm)')
-    p.add_argument('--dropout_rate', type=float, default=0, help='Dropout')
+    p.add_argument('--dropout_rate', type=float, default=0., help='Dropout')
+    p.add_argument('--layerNorm', type=str, default='BN', help='normalization layer for some network architectures')
 
     args = p.parse_args() if conf_exp is None else p.parse_args(args=[])
     #args.var_dict = ast.literal_eval(args.var_dict)
