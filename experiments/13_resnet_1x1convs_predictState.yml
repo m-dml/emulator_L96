@@ -1,0 +1,33 @@
+exp_id: resnet_1x1convs_predictState_J10_stackingResBlocksDirect_shallow_onlyDropout
+datadir: /gpfs/work/nonnenma/data/emulators/L96/
+res_dir: /gpfs/work/nonnenma/results/emulators/L96/
+K: 36
+J: 10
+T: 605
+dt: 0.001
+prediction_task: state
+lead_time: 1
+seq_length: 1
+train_frac: 0.8
+validation_frac: 0.1
+spin_up_time: 5.
+loss_fun: mse
+batch_size: 32
+dropout_rate: 0.1
+layerNorm: ID
+lr: 1e-4
+lr_min: 1e-6
+lr_decay: 0.1
+weight_decay: 0.
+max_lr_patience: 10
+max_patience: 50
+eval_every: 2000
+max_epochs: 200
+model_name: ResNet
+filters: [128, 128, 128, 128]
+kernel_sizes: [3, 3, 3, 3]
+filters_ks1_init: [128]
+filters_ks1_inter: [128, 128]
+filters_ks1_final: [128]
+additiveResShortcuts: False
+direct_shortcut: True
