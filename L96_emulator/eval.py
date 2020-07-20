@@ -119,7 +119,7 @@ def get_rollout_fun(dg_train, model_forward, prediction_task):
     return model_simulate
 
 
-def plot_rollout(out, out_model, out_comparison, T_start, T_dur, K, fig=None):
+def plot_rollout(out, out_model, out_comparison, T_start, T_dur, K=None, fig=None):
 
     vmax = np.maximum(np.nanmax(out[np.arange(T_dur)+T_start]),
                       np.nanmax(out_model))
@@ -145,13 +145,15 @@ def plot_rollout(out, out_model, out_comparison, T_start, T_dur, K, fig=None):
     plt.subplot(1,2,2)
     plt.plot(np.sqrt(np.mean( (out_model - out[np.arange(T_dur+1)+ T_start])**2, axis=1 )), 
              'b', label='model-reconstruction vs sim')
-    plt.plot(np.sqrt(np.mean( (out_model[:,:K] - out[np.arange(T_dur+1)+ T_start][:,:K])**2, axis=1 )), 
-             'b--', label='model-reconstruction vs sim, slow vars only')
+    if not K is None:
+        plt.plot(np.sqrt(np.mean( (out_model[:,:K] - out[np.arange(T_dur+1)+ T_start][:,:K])**2, axis=1 )), 
+                 'b--', label='model-reconstruction vs sim, slow vars only')
     try:
         plt.plot(np.sqrt(np.mean( (out_comparison[:T_dur+1] - out[np.arange(T_dur+1)+ T_start])**2, axis=1 )),
                 'k', label='solver 2x temp. resol. vs sim')
-        plt.plot(np.sqrt(np.mean( (out_comparison[:T_dur+1][:,:K] - out[np.arange(T_dur+1)+ T_start][:,:K])**2, axis=1 )),
-                'k--', label='solver 2x temp. resol. vs sim, slow vars only')
+        if not K is None:
+            plt.plot(np.sqrt(np.mean( (out_comparison[:T_dur+1][:,:K] - out[np.arange(T_dur+1)+ T_start][:,:K])**2, axis=1 )),
+                    'k--', label='solver 2x temp. resol. vs sim, slow vars only')
     except:
         pass
     plt.title('missmatch over time')
