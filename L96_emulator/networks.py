@@ -356,12 +356,13 @@ class TinyResNet(TinyNetwork):
 
 class AnalyticModel_oneLevel():
 
-    def __init__(self, K, F=10., loc=1., scale=1e6):
+    def __init__(self, K, F=10., loc=1., scale=1e6, skip_conn=True):
 
         self.K = K
         self.nonlinearity = lambda x: x**2
 
         # approximate identity through x = s * (x/s + l)^2 / (2*l) + s * l
+        self.skip_conn = skip_conn
         self.scale, self.loc = scale, loc
         self.loc_grad = 2. * self.loc
 
@@ -370,19 +371,23 @@ class AnalyticModel_oneLevel():
         self.W1 = np.vstack(
             (kminus1, 
              kplus1 - kminus2,
-             kminus1 + kplus1 - kminus2,
-             np.eye(K) / self.scale)
+             kminus1 + kplus1 - kminus2)
         )
-        self.b1 = np.zeros((4*K,1))
-        self.b1[3*K:,:] = self.loc * np.ones((K,1))
+        self.b1 = np.zeros((3*K,1))
 
         self.W2 = np.hstack(
             (- np.eye(K) / 2., 
              - np.eye(K) / 2., 
                np.eye(K) / 2., 
-             - self.scale / self.loc_grad * np.eye(K))
+             - np.eye(K))
         )
-        self.b2 = F * np.ones(K) -  self.W2.dot(self.b1**2)
+        self.b2 = F * np.ones((K,1))
+
+        if not self.skip_conn:
+            self.W1 = np.vstack((self.W1, np.eye(K) / self.scale))
+            self.b1 = np.vstack((self.b1, self.loc * np.ones((K,1))))
+            self.W2[:,-K:] *= self.scale / self.loc_grad
+            self.b2 -= self.W2.dot(self.b1**2)
 
     def td_mat(self, K, k):
         if K <= 0:
@@ -392,51 +397,62 @@ class AnalyticModel_oneLevel():
         
     def forward(self, x):
         x_ = x.reshape(-1, 1) if x.ndim == 1 else x
-        out = self.W2.dot(self.nonlinearity(self.W1.dot(x_) + self.b1)) + self.b2
+        z = self.nonlinearity(self.W1.dot(x_) + self.b1)
+        if self.skip_conn:
+            z = np.vstack((z,x_))
+        out = self.W2.dot(z) + self.b2
         return out.flatten() if x.ndim == 1 else out
 
 
 class AnalyticModel_twoLevel(AnalyticModel_oneLevel):
 
-    def __init__(self, K, J, F=10., b=10., c=10., h=1., loc=1., scale=1e6):
+    def __init__(self, K, J, F=10., b=10., c=10., h=1., loc=1., scale=1e6, skip_conn=True):
 
-        super(AnalyticModel_twoLevel, self).__init__(K=K, F=F, loc=loc, scale=scale)
+        super(AnalyticModel_twoLevel, self).__init__(K=K, F=F, loc=loc, scale=scale, skip_conn=skip_conn)
+        n = 3 if self.skip_conn else 4
 
         kminus1, kplus1, kplus2 = self.td_mat(J*K,-1), self.td_mat(J*K,1), self.td_mat(J*K,2)
         # block matrix: W1 = [W1 for X,    0, 
         #                        0,     W1 for Y]
         W1_Y = np.vstack((kplus1, 
                           kminus1 - kplus2,
-                          kplus1 + kminus1 - kplus2,
-                          np.eye(J*K) / self.scale))
-        self.W1 = np.vstack((np.hstack((self.W1, np.zeros((4*K, J*K)))), 
-                             np.hstack((np.zeros((4*J*K, K)), W1_Y))))
-
-        self.b1 = np.vstack((self.b1, np.zeros((4*J*K,1))))
-        self.b1[-J*K:,:] = self.loc * np.ones((J*K,1))
+                          kplus1 + kminus1 - kplus2))
+        W1_Y  = W1_Y if self.skip_conn else np.vstack((W1_Y, np.eye(J*K) / self.scale))
+        self.W1 = np.vstack((np.hstack((self.W1, np.zeros((n*K, J*K)))), 
+                             np.hstack((np.zeros((n*J*K, K)), W1_Y))))
+        self.b1 = np.vstack((self.b1, np.zeros((3*J*K,1))))
 
         eyes = c * h / J * np.eye(K).flatten()
         eyes = [eyes for i in range(J)]
+        sf = 1. if self.skip_conn else self.scale / self.loc_grad
 
+        # block matrix: W2 = [W2 for X, `mean of Y`,
+        #                     `add X`,    W2 for Y]    
         self.W2 = np.hstack((self.W2, np.zeros((K, 4*J*K))))
         # dependency of X_k on <Y_{k,J}>
-        self.W2[:, -J*K:] = - self.scale / self.loc_grad * np.vstack(eyes).T.reshape(K, J*K)
+        self.W2[:, -J*K:] = - sf * np.vstack(eyes).T.reshape(K, J*K)
         # dependency of Y_{k,j} on X_k
         W2_Y = np.zeros((J*K, 4*K))
-        W2_Y[:,-K:] = self.scale / self.loc_grad * np.vstack(eyes).T.reshape(K,J*K).T
+        W2_Y[:,-K:] = sf * np.vstack(eyes).T.reshape(K,J*K).T
         # dependencies of Y_{k,j} on Y_{k,~j}
         W2_Y = np.hstack((W2_Y,
                           c * np.hstack(
                                   (- b * np.eye(J*K) / 2.,
                                    - b * np.eye(J*K) / 2.,
                                      b * np.eye(J*K) / 2.,
-                                   - self.scale / self.loc_grad * np.eye(J*K))  
+                                   - sf * np.eye(J*K))  
                           )
                          ))
-        # block matrix: W2 = [W2 for X, `mean of Y`, 
-        #                     `add X`,    W2 for Y]        
         self.W2 = np.vstack((self.W2, W2_Y))
 
         self.b2 = np.zeros((K*(J+1),1))
         self.b2[:K,:] = F
-        self.b2 = self.b2 -  self.W2.dot(self.b1**2)
+
+        if self.skip_conn: # re-order hidden units: nonlinear first, identity last
+            self.W2 = np.hstack((self.W2[:,:3*K], 
+                                 self.W2[:,4*K:-J*K], 
+                                 self.W2[:,3*K:4*K], 
+                                 self.W2[:,-J*K:]))
+        else:
+            self.b1 = np.vstack((self.b1, self.loc * np.ones((J*K,1))))
+            self.b2 -= self.W2.dot(self.b1**2)
