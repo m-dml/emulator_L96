@@ -18,8 +18,12 @@ def sortL96intoChannels(x, J):
     K = x.shape[1]//(J+1)
     assert x.shape[1]/(J+1) == K
 
-    out = np.concatenate((x[:,:K].reshape(-1,K,1), x[:,K:].reshape(-1, K, J)),
-                         axis=2).transpose(0,2,1)
+    if isinstance(x, torch.Tensor):
+        out = torch.cat((x[:,:K].reshape(-1,K,1), x[:,K:].reshape(-1, K, J)),
+                        axis=2).permute(0,2,1)        
+    elif isinstance(x, np.ndarray):
+        out = np.concatenate((x[:,:K].reshape(-1,K,1), x[:,K:].reshape(-1, K, J)),
+                             axis=2).transpose(0,2,1)
     return out
 
 def sortL96fromChannels(x):
@@ -27,7 +31,10 @@ def sortL96fromChannels(x):
     assert x.ndim == 3
     J, K = x.shape[1]-1,  x.shape[2]
 
-    out = np.concatenate((x[:,0,:], x[:,1:,:].transpose(0,2,1).reshape(-1, K*J)), axis=1)
+    if isinstance(x, torch.Tensor):
+        out = torch.cat((x[:,0,:], x[:,1:,:].permute(0,2,1).reshape(-1, K*J)), axis=1)
+    elif isinstance(x, np.ndarray):
+        out = np.concatenate((x[:,0,:], x[:,1:,:].transpose(0,2,1).reshape(-1, K*J)), axis=1)
     return out
 
 def predictor_corrector(fun, y0, times, alpha=0.5):

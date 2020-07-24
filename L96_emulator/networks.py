@@ -1,6 +1,9 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
+from .util import init_torch_device
+
+device, dtype = init_torch_device(), torch.float32
 
 def named_network(model_name, n_input_channels, n_output_channels, seq_length, **kwargs):
 
@@ -361,11 +364,14 @@ class AnalyticModel_oneLevel():
         self.K = K
         self.nonlinearity = lambda x: x**2
 
-        # approximate identity through x = s * (x/s + l)^2 / (2*l) + s * l
-        self.skip_conn = skip_conn
+        # approximate identity through x = s/2 * ((x/s + l)^2 -* l^2)
         self.scale, self.loc = scale, loc
         self.loc_grad = 2. * self.loc
 
+        # alternatively, obtain identity mapping to output layer through skip connection
+        self.skip_conn = skip_conn
+        
+        # analytically compute weights and biases to solve single-level L96 diff.eq. rhs  
         kplus1, kminus1, kminus2 = self.td_mat(K,1), self.td_mat(K,-1), self.td_mat(K,-2)
 
         self.W1 = np.vstack(
@@ -383,24 +389,30 @@ class AnalyticModel_oneLevel():
         )
         self.b2 = F * np.ones((K,1))
 
-        if not self.skip_conn:
+        if not self.skip_conn: # extend hidden state by another K units for identity
             self.W1 = np.vstack((self.W1, np.eye(K) / self.scale))
             self.b1 = np.vstack((self.b1, self.loc * np.ones((K,1))))
             self.W2[:,-K:] *= self.scale / self.loc_grad
             self.b2 -= self.W2.dot(self.b1**2)
 
     def td_mat(self, K, k):
+
         if K <= 0:
             return np.array([[1.]]) if k==0 else np.array([[]])
         ak, koff = np.abs(k), K+k if k <= 0 else k-K 
+
         return np.diag(np.ones(K-ak), k=k) + np.diag(np.ones(ak), k=koff)
-        
+
     def forward(self, x):
+
         x_ = x.reshape(-1, 1) if x.ndim == 1 else x
+
         z = self.nonlinearity(self.W1.dot(x_) + self.b1)
         if self.skip_conn:
             z = np.vstack((z,x_))
+
         out = self.W2.dot(z) + self.b2
+
         return out.flatten() if x.ndim == 1 else out
 
 
@@ -456,3 +468,55 @@ class AnalyticModel_twoLevel(AnalyticModel_oneLevel):
         else:
             self.b1 = np.vstack((self.b1, self.loc * np.ones((J*K,1))))
             self.b2 -= self.W2.dot(self.b1**2)
+
+
+class MinimalNetL96(torch.nn.Module):
+
+    def __init__(self, 
+                 K, J=0, 
+                 F=10., b=10., c=10., h=1., 
+                 skip_conn=True):
+        
+        super(MinimalNetL96, self).__init__()
+
+        self.skip_conn = skip_conn
+
+        self.Ni = K*(J+1)
+        self.Nh = 3*self.Ni if skip_conn else 4*self.Ni
+
+        self.layer1 = torch.nn.Linear(in_features = self.Ni, 
+                                      out_features = self.Nh, 
+                                      bias = True)
+        self.layer2 = torch.nn.Linear(in_features = 4*self.Ni, 
+                                      out_features = self.Ni, 
+                                      bias = True)
+        self.nonlinearity = lambda x: x**2
+
+        if J > 0:
+            model_np = AnalyticModel_twoLevel(K=K, J=J, 
+                                              F=F, b=b, c=c, h=h, 
+                                              skip_conn=skip_conn)
+        else: 
+            model_np = AnalyticModel_oneLevel(K=K, 
+                                              skip_conn=skip_conn)
+        def get_param(p):
+            p = torch.as_tensor(p, device=device, dtype=dtype)
+            return torch.nn.Parameter(p)
+
+        self.layer1.weight = get_param(model_np.W1)
+        self.layer1.bias = get_param(model_np.b1.flatten())
+        self.layer2.weight = get_param(model_np.W2)
+        self.layer2.bias = get_param(model_np.b2.flatten())
+
+    def forward(self, x):
+
+        x_ = x.reshape(1,-1) if x.ndim == 1 else x
+        assert x_.ndim == 2
+
+        z = self.nonlinearity(self.layer1(x_))
+        if self.skip_conn:
+            z = torch.cat((z,x_), axis=1)
+
+        out = self.layer2(z)
+
+        return out.flatten() if x.ndim == 1 else out
