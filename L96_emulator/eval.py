@@ -9,6 +9,31 @@ import torch
 
 device, dtype = init_torch_device(), torch.float32
 
+
+class Rollout(torch.nn.Module):
+
+    def __init__(self, model_forward, prediction_task, K, J, N, x_init=None):
+
+        super(Rollout, self).__init__()
+
+        self.model_forward = model_forward
+        self.prediction_task = prediction_task
+
+        x_init = np.random.normal(size=(N,K*(J+1))) if x_init is None else x_init
+        assert x_init.ndim in [2,3]
+        self.X = torch.nn.Parameter(torch.as_tensor(x_init, device=device, dtype=dtype))
+
+    def forward(self, T):
+
+        if self.prediction_task == 'state':
+            x = self.X
+            for t in range(T):
+                x = self.model_forward(x)
+            return x
+        else:
+            raise NotImplementedError
+
+
 def solve_from_init(K, J, T_burnin, T_, dt, F, h, b, c, data, dilation=2, norm_mean=0., norm_std=1.):
 
     assert int(dilation) == dilation
@@ -72,19 +97,20 @@ def load_model_from_exp_conf(res_dir, conf):
 def get_rollout_fun(dg_train, model_forward, prediction_task):
 
     J, K = dg_train.data.shape[1]-1, dg_train.data.shape[2]
-    dtype = torch.float32
-    
+
     if prediction_task == 'update_with_past':
 
+        raise NotImplementedError
+
         assert isinstance(dg_train, DatasetRelPredPast)
-        std_out = torch.as_tensor(dg_train.std_out, device='cpu', dtype=dtype)
-        mean_out = torch.as_tensor(dg_train.mean_out, device='cpu', dtype=dtype)
+        std_out = torch.as_tensor(dg_train.std_out, device=device, dtype=dtype)
+        mean_out = torch.as_tensor(dg_train.mean_out, device=device, dtype=dtype)
 
         def model_simulate(y0, dy0, T):
             x = np.empty((T+1, *y0.shape[1:]))
             x[0] = y0.copy()
-            xx = torch.as_tensor(x[0], device='cpu', dtype=dtype)
-            dx = torch.as_tensor(dy0.copy(), device='cpu', dtype=dtype)
+            xx = torch.as_tensor(x[0], device=device, dtype=dtype)
+            dx = torch.as_tensor(dy0.copy(), device=device, dtype=dtype)
             for i in range(1,T+1):
                 xxo = xx * 1.
                 xx = std_out * model_forward(torch.cat((xx.reshape(1,J+1,K), dx), axis=1)) + mean_out + xx.reshape(1,J+1,-1)
@@ -94,11 +120,13 @@ def get_rollout_fun(dg_train, model_forward, prediction_task):
 
     elif prediction_task == 'update': 
 
+        raise NotImplementedError
+
         assert isinstance(dg_train, DatasetRelPred)
         def model_simulate(y0, dy0, T):
             x = np.empty((T+1, *y0.shape[1:]))
             x[0] = y0.copy()
-            xx = torch.as_tensor(x[0], device='cpu', dtype=dtype).reshape(1,1,-1)
+            xx = torch.as_tensor(x[0], device=device, dtype=dtype).reshape(1,1,-1)
             for i in range(1,T+1):
                 xx = model_forward(xx.reshape(1,J+1,-1)) + xx.reshape(1,J+1,-1)
                 x[i] = xx.detach().numpy().copy()
@@ -110,7 +138,7 @@ def get_rollout_fun(dg_train, model_forward, prediction_task):
         def model_simulate(y0, dy0, T):
             x = np.empty((T+1, *y0.shape[1:]))
             x[0] = y0.copy()
-            xx = torch.as_tensor(x[0], device='cpu', dtype=dtype).reshape(1,1,-1)
+            xx = torch.as_tensor(x[0], device=device, dtype=dtype).reshape(1,1,-1)
             for i in range(1,T+1):
                 xx = model_forward(xx.reshape(1,J+1,-1))
                 x[i] = xx.detach().numpy().copy()
