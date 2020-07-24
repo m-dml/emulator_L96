@@ -112,7 +112,12 @@ for i in range(n_steps):
     if np.mod(i, n_steps//10) == 0:
         print(f'-- training done {100*i/n_steps}%')
 
+        torch.save(roller_outer.state_dict(), save_dir+results_fn)
+        np.save(save_dir + output_fn, dict(training_loss=loss_vals, validation_loss=None,
+                                           T_start=T_start, T_rollout=T_rollout, x_init=x_init))
+
+print('finished')
 torch.save(roller_outer.state_dict(), save_dir+results_fn)
 np.save(save_dir + output_fn, dict(training_loss=loss_vals, validation_loss=None,
                                    T_start=T_start, T_rollout=T_rollout, x_init=x_init))
-print('finished')
+        
