@@ -59,8 +59,12 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
         def model_forward(input):
             return model.forward(input)
 
-    elif mode_name in ['AnalyticModel_twoLevel', 'AnalyticModel_oneLevel']:
-        pass
+    elif model_name == 'MinimalNetL96':
+
+        K,J = kwargs['K'], kwargs['J']
+        return MinimalNetL96(K,J,
+                             F=10.,b=10.,c=10.,h=1.,
+                             skip_conn=True)
 
     return model, model_forward
 
