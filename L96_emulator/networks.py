@@ -479,6 +479,7 @@ class MinimalNetL96(torch.nn.Module):
     def __init__(self, 
                  K, J=0, 
                  F=10., b=10., c=10., h=1., 
+                 loc=1., scale=1e6,
                  skip_conn=True):
         
         super(MinimalNetL96, self).__init__()
