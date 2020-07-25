@@ -20,11 +20,11 @@ F, h, b, c = 10, 1, 10, 10
 K, J, T, dt = 36, 10, 605, 0.001
 spin_up_time, train_frac = 5., 0.8
 
-N, T_rollout = 100, 100
+N, T_rollout = 100, 1000
 T_start = int(np.ceil(spin_up_time/dt)) * np.arange(1,N+1, dtype=np.int)
 print('T_start \n', T_start)
 
-exp_id = 'minimalnet_fullyconn_skipconn_J10'
+exp_id = 'minimalnet_fullyconn_skipconn_J10' # 'minimalnet_fullyconn_linearize_J10'
 lead_time = 1
 prediction_task = 'state'
 
@@ -93,11 +93,12 @@ def model_forward(x):
 
 from L96_emulator.eval import Rollout
 
-roller_outer = Rollout(model_forward, prediction_task='state', K=K, J=J, N=N)
+x_init = out[T_start]
+roller_outer = Rollout(model_forward, prediction_task='state', K=K, J=J, N=N, x_init=x_init)
 target = torch.as_tensor(out[T_start+T_rollout], dtype=dtype, device=device)
 x_init = roller_outer.X.detach().cpu().numpy().copy()
 
-n_steps, lr, weight_decay = 100000, 1e-2, 0.
+n_steps, lr, weight_decay = 100000, 1e-3, 0.
 roller_outer.train()
 optimizer = torch.optim.Adam(roller_outer.parameters(), lr=lr, weight_decay=weight_decay)
 loss_vals = np.zeros(n_steps)
@@ -120,4 +121,3 @@ print('finished')
 torch.save(roller_outer.state_dict(), save_dir+results_fn)
 np.save(save_dir + output_fn, dict(training_loss=loss_vals, validation_loss=None,
                                    T_start=T_start, T_rollout=T_rollout, x_init=x_init))
-        
