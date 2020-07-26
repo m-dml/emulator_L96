@@ -93,7 +93,7 @@ def model_forward(x):
 
 from L96_emulator.eval import Rollout
 
-x_init = out[T_start]
+x_init = out[T_start+T_rollout]
 roller_outer = Rollout(model_forward, prediction_task='state', K=K, J=J, N=N, x_init=x_init)
 target = torch.as_tensor(out[T_start+T_rollout], dtype=dtype, device=device)
 x_init = roller_outer.X.detach().cpu().numpy().copy()
