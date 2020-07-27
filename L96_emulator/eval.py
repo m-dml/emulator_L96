@@ -1,4 +1,4 @@
-from .util import sortL96fromChannels, sortL96intoChannels, predictor_corrector, init_torch_device
+from .util import sortL96fromChannels, sortL96intoChannels, predictor_corrector, device, dtype
 from .dataset import Dataset, DatasetRelPred, DatasetRelPredPast
 from .networks import named_network
 from L96sim.L96_base import f1, f2
@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-device, dtype = init_torch_device(), torch.float32
-
+#device, dtype = init_torch_device(), torch.float32
 
 class Rollout(torch.nn.Module):
 
@@ -115,7 +114,7 @@ def get_rollout_fun(dg_train, model_forward, prediction_task):
                 xxo = xx * 1.
                 xx = std_out * model_forward(torch.cat((xx.reshape(1,J+1,K), dx), axis=1)) + mean_out + xx.reshape(1,J+1,-1)
                 dx = xx - xxo
-                x[i] = xx.detach().numpy().copy()
+                x[i] = xx.detach().cpu().numpy().copy()
             return x
 
     elif prediction_task == 'update': 
@@ -129,7 +128,7 @@ def get_rollout_fun(dg_train, model_forward, prediction_task):
             xx = torch.as_tensor(x[0], device=device, dtype=dtype).reshape(1,1,-1)
             for i in range(1,T+1):
                 xx = model_forward(xx.reshape(1,J+1,-1)) + xx.reshape(1,J+1,-1)
-                x[i] = xx.detach().numpy().copy()
+                x[i] = xx.detach().cpu().numpy().copy()
             return x
 
     elif prediction_task == 'state': 
@@ -141,7 +140,7 @@ def get_rollout_fun(dg_train, model_forward, prediction_task):
             xx = torch.as_tensor(x[0], device=device, dtype=dtype).reshape(1,1,-1)
             for i in range(1,T+1):
                 xx = model_forward(xx.reshape(1,J+1,-1))
-                x[i] = xx.detach().numpy().copy()
+                x[i] = xx.detach().cpu().numpy().copy()
             return x
 
     return model_simulate

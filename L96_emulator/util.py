@@ -12,6 +12,8 @@ def init_torch_device():
         torch.set_default_tensor_type("torch.FloatTensor")
     return device
 
+device, dtype, dtype_np = init_torch_device(), torch.float32, np.float32
+
 def sortL96intoChannels(x, J):
 
     assert x.ndim == 2

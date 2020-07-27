@@ -1,9 +1,7 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-from .util import init_torch_device
-
-device, dtype = init_torch_device(), torch.float32
+from .util import device, dtype
 
 def named_network(model_name, n_input_channels, n_output_channels, seq_length, **kwargs):
 
