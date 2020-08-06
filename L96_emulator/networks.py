@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-from .util import device, dtype
+from .util import device, dtype, dtype_np
 
 def named_network(model_name, n_input_channels, n_output_channels, seq_length, **kwargs):
 
@@ -43,7 +43,7 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
                       torch.nn.BatchNorm2d : torch.nn.BatchNorm1d,
                       torch.nn.Identity() : torch.nn.Identity()
                      }                   
-        
+
         model = ResNet(n_filters_ks3=n_filters_ks3, 
                        n_filters_ks1=n_filters_ks1, 
                        n_channels_in=seq_length * n_input_channels, 
@@ -59,10 +59,47 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
 
     elif model_name == 'MinimalNetL96':
 
-        K,J = kwargs['K'], kwargs['J']
-        return MinimalNetL96(K,J,
-                             F=10.,b=10.,c=10.,h=1.,
-                             skip_conn=True)
+        K, J, init = kwargs['K'], kwargs['J'], kwargs['init']
+        model = MinimalNetL96(K,J, F=10.,b=10.,c=10.,h=1.,
+                             skip_conn=True, init=init)
+
+        def model_forward(x):
+            """ predictor-corrector step """
+            alpha = 0.5
+            ndim = x.ndim
+            assert ndim == 2
+
+            x = sortL96intoChannels(x,J=J) * std_out + mean_out
+            x = sortL96fromChannels(x)
+
+            f0 = model.forward(x) # ndim=2 for MinimalNet96
+            f1 = model.forward(x + dt*f0)
+
+            x = x + dt * (alpha*f0 + (1-alpha)*f1)
+            x = (sortL96intoChannels(x,J=J) - mean_out) / std_out
+
+            return  sortL96fromChannels(x)
+
+    elif model_name == 'MinimalConvNetL96':
+
+        K, J, init = kwargs['K'], kwargs['J'], kwargs['init']
+        model = MinimalConvNetL96(K, J, F=10., b=10., c=10., h=1., init=init)
+
+        def model_forward(x):
+            """ predictor-corrector step """
+            alpha = 0.5
+            ndim = x.ndim
+            assert ndim == 3
+
+            x = x * std_out + mean_out
+
+            f0 = model.forward(x) # ndim=3 for MinimalConvNet96
+            f1 = model.forward(x + dt*f0)
+
+            x = x + dt * (alpha*f0 + (1-alpha)*f1)
+            x = (x - mean_out) / std_out
+
+            return x
 
     return model, model_forward
 
@@ -478,7 +515,7 @@ class MinimalNetL96(torch.nn.Module):
                  K, J=0, 
                  F=10., b=10., c=10., h=1., 
                  loc=1., scale=1e6,
-                 skip_conn=True):
+                 skip_conn=True, init='rand'):
         
         super(MinimalNetL96, self).__init__()
 
@@ -495,21 +532,22 @@ class MinimalNetL96(torch.nn.Module):
                                       bias = True)
         self.nonlinearity = lambda x: x**2
 
-        if J > 0:
-            model_np = AnalyticModel_twoLevel(K=K, J=J, 
-                                              F=F, b=b, c=c, h=h, 
-                                              skip_conn=skip_conn)
-        else: 
-            model_np = AnalyticModel_oneLevel(K=K, 
-                                              skip_conn=skip_conn)
-        def get_param(p):
-            p = torch.as_tensor(p, device=device, dtype=dtype)
-            return torch.nn.Parameter(p)
+        if init == 'analytical':
+            if J > 0:
+                model_np = AnalyticModel_twoLevel(K=K, J=J, 
+                                                  F=F, b=b, c=c, h=h, 
+                                                  skip_conn=skip_conn)
+            else: 
+                model_np = AnalyticModel_oneLevel(K=K, 
+                                                  skip_conn=skip_conn)
+            def get_param(p):
+                p = torch.as_tensor(p, device=device, dtype=dtype)
+                return torch.nn.Parameter(p)
 
-        self.layer1.weight = get_param(model_np.W1)
-        self.layer1.bias = get_param(model_np.b1.flatten())
-        self.layer2.weight = get_param(model_np.W2)
-        self.layer2.bias = get_param(model_np.b2.flatten())
+            self.layer1.weight = get_param(model_np.W1)
+            self.layer1.bias = get_param(model_np.b1.flatten())
+            self.layer2.weight = get_param(model_np.W2)
+            self.layer2.bias = get_param(model_np.b2.flatten())
 
     def forward(self, x):
 
@@ -523,3 +561,125 @@ class MinimalNetL96(torch.nn.Module):
         out = self.layer2(z)
 
         return out.flatten() if x.ndim == 1 else out
+
+
+class AnalyticConvModel_oneLevel():
+
+    def __init__(self, K, F=10.):
+
+        self.K = K
+        self.nonlinearity = lambda x: x**2
+        self.W1 = np.array([[ 0, 1, 0, 0],
+                            [-1, 0, 0, 1],
+                            [-1, 1, 0, 1]],
+                          dtype=dtype_np).reshape(3,1,4)
+        self.W2 = np.array([-.5, -.5, .5, -1.],
+                          dtype=dtype_np).reshape(1,4,1)
+        
+        self.b1 = np.zeros(3, dtype=dtype_np)
+        self.b2 = F * np.ones(1, dtype=dtype_np)
+
+    def forward(self, x):
+
+        raise NotImplementedError()
+
+
+class AnalyticConvModel_twoLevel(AnalyticConvModel_oneLevel):
+
+    def __init__(self, K, J, F=10., b=10., c=10., h=1.):
+
+        super(AnalyticConvModel_twoLevel, self).__init__(K=K)
+        
+        self.nonlinearity = lambda x: x**2
+        if J > 1:
+            W1 = np.zeros((3*(J+1), J+1, 4), dtype=dtype_np)
+        else:
+            W1 = np.zeros((3*(J+1), J+1, 5), dtype=dtype_np)
+        W2 = np.zeros((J+1, 4*(J+1), 1), dtype=dtype_np)
+
+        # filters for slow variables
+        W1[:3,:1,:4] = self.W1
+
+        # filters for fast variables, y_{k,j+1}
+        for j in range(J-1):
+            W1[3+j,j+2,2] = 1.
+        W1[3+J-1,1,3] = 1.    # y_{k,j+1} in case j=0
+
+        # filters for fast variables, y_{k,j-1} - y_{k,j+2} 
+        for j in range(0,J-2):
+            W1[3+J+j,j+3,2] = -1.
+        for j in range(1,J):
+            W1[3+J+j,j,2] = 1.
+        W1[3+J, -1, 1] = 1.   # y_{k,j-1} in case j=0
+        if J > 1:
+            W1[2+2*J, 2, 3] = -1. # y_{k,j+2} in case j=J-1
+            W1[1+2*J, 1, 3] = -1. # y_{k,j+2} in case j=J-2
+        else: 
+            W1[2+2*J, 1, 4] = -1. # y_{k,j+2} in case j=J-1
+
+        # filters for fast variables, y_{k,j+1} + y_{k,j-1} - y_{k,j+2} 
+        for j in range(0,J):
+            W1[3+2*J+j,:,:] = W1[3+J+j,:,:] + W1[3+j,:,:]
+
+        W2[0,:3,:], W2[0, -(J+1),:], W2[0,-J:,:] = self.W2[0,:3,:], -1., -h*c/J
+        for j in range(J):
+            W2[1+j,-J+j,:] = -c         # weight for - c * Y_{k,j}
+            W2[1+j,3+j,:] = -b*c/2.     # weight for - bc/2 * (Y_{k,j+1})**2
+            W2[1+j,3+J+j,:] = -b*c/2.   # weight for - bc/2 * (Y_{k,j-1}-Y_{k,j+2})**2
+            W2[1+j,3+2*J+j,:] = b*c/2.  # weight for + bc/2 * (Y_{k,j+1}+Y_{k,j-1}-Y_{k,j+2})**2
+        W2[1:,-(J+1),:] = h*c/J
+        
+        self.W1, self.W2 = W1, W2
+        
+        self.b1 = np.zeros(3*(J+1), dtype=dtype_np)
+        self.b2 = np.zeros(J+1, dtype=dtype_np)
+        self.b2[0] = F
+
+    def forward(self, x):
+
+        raise NotImplementedError()
+
+class MinimalConvNetL96(torch.nn.Module):
+
+    def __init__(self, K, J=0, F=10., b=10., c=10., h=1., init='rand'):
+        
+        super(MinimalConvNetL96, self).__init__()
+        
+        self.layer1 = setup_conv(in_channels = J+1, 
+                                 out_channels = 3*(J+1), 
+                                 kernel_size = 4 if J>1 else 5, 
+                                 bias = True, 
+                                 padding_mode='circular', 
+                                 stride=1)
+        self.layer2 = setup_conv(in_channels = 4*(J+1), 
+                                 out_channels = 1, 
+                                 kernel_size = 1, 
+                                 bias = True, 
+                                 padding_mode='circular', 
+                                 stride=1)
+
+        self.nonlinearity = lambda x: x**2
+
+        if init == 'analytical':
+            if J > 0:
+                model_np = AnalyticConvModel_twoLevel(K=K, J=J, 
+                                                  F=F, b=b, c=c, h=h)
+            else: 
+                model_np = AnalyticConvModel_oneLevel(K=K)
+            def get_param(p):
+                p = torch.as_tensor(p, device=device, dtype=dtype)
+                return torch.nn.Parameter(p)
+
+            self.layer1.weight = get_param(model_np.W1)
+            self.layer1.bias = get_param(model_np.b1.flatten())
+            self.layer2.weight = get_param(model_np.W2)
+            self.layer2.bias = get_param(model_np.b2.flatten())
+
+    def forward(self, x):
+
+        assert x.ndim == 3 # (N, J, K), J 'channels', K locations
+
+        z = self.nonlinearity(self.layer1(x))
+        out = self.layer2(torch.cat((z, x), axis=1))
+
+        return out

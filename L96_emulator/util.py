@@ -42,7 +42,7 @@ def sortL96fromChannels(x):
 def predictor_corrector(fun, y0, times, alpha=0.5):
 
     y = np.zeros((len(times), *y0.shape), dtype=y0.dtype)
-    y[0] = y0
+    y[0] = y0.copy()
     for i in range(1,len(times)):        
         dt = times[i] - times[i-1]
 
