@@ -59,13 +59,13 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
 
     elif model_name == 'MinimalNetL96':
 
-        K, J, init = kwargs['K'], kwargs['J'], kwargs['init']
+        K, J = kwargs['K_net'], kwargs['J_net'], 
+        init, dt, alpha = kwargs['init_net'], kwargs['dt_net'], kwargs['alpha_net']
         model = MinimalNetL96(K,J, F=10.,b=10.,c=10.,h=1.,
                              skip_conn=True, init=init)
 
-        def model_forward(x):
+        def model_forward(x, mean_out=0., std_out=1.):
             """ predictor-corrector step """
-            alpha = 0.5
             ndim = x.ndim
             assert ndim == 2
 
@@ -82,12 +82,12 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
 
     elif model_name == 'MinimalConvNetL96':
 
-        K, J, init = kwargs['K'], kwargs['J'], kwargs['init']
+        K, J = kwargs['K_net'], kwargs['J_net'], 
+        init, dt, alpha = kwargs['init_net'], kwargs['dt_net'], kwargs['alpha_net']
         model = MinimalConvNetL96(K, J, F=10., b=10., c=10., h=1., init=init)
 
-        def model_forward(x):
+        def model_forward(x, mean_out=0., std_out=1.):
             """ predictor-corrector step """
-            alpha = 0.5
             ndim = x.ndim
             assert ndim == 3
 

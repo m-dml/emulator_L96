@@ -1,4 +1,4 @@
-exp_id: minimalNet_predictState_J10_initAnalytical
+exp_id: minimalNet_predictState_J10_initRand
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
 K: 36
@@ -27,7 +27,7 @@ max_epochs: 200
 model_name: MinimalConvNetL96
 filters: [0]
 kernel_sizes: [4]
-init_net: analytical
+init_net: rand
 K_net: 36
 J_net: 10
 dt_net: 0.001

@@ -51,10 +51,10 @@ def run_exp(exp_id, datadir, res_dir,
     assert test_frac > 0.
     spin_up = int(spin_up_time/dt)
 
-    dg_train = DatasetClass(data=out, J=J, offset=lead_time, normalize=normalize_data, 
+    dg_train = DatasetClass(data=out, J=J, offset=lead_time, normalize=bool(normalize_data), 
                        start=spin_up, 
                        end=int(np.floor(out.shape[0]*train_frac)))
-    dg_val   = DatasetClass(data=out, J=J, offset=lead_time, normalize=normalize_data, 
+    dg_val   = DatasetClass(data=out, J=J, offset=lead_time, normalize=bool(normalize_data), 
                        start=int(np.ceil(out.shape[0]*train_frac)), 
                        end=int(np.floor(out.shape[0]*(train_frac+validation_frac))))
 
@@ -132,7 +132,7 @@ def setup(conf_exp=None):
     p.add_argument('--train_frac', type=float, default=0.8, help='fraction of data data for training')
     p.add_argument('--validation_frac', type=float, default=0.1, help='fraction of data for validation')
     p.add_argument('--spin_up_time', type=float, default=5., help='spin-up time for simulation in [s]')
-    p.add_argument('--normalize_data', type=bool, default=True, help='bool specifying if to z-score data')
+    p.add_argument('--normalize_data', type=int, default=1, help='bool specifying if to z-score data')
 
     #p.add_argument('--past_times', type=int, nargs='+', default=[], help='additional time points as input')
     #p.add_argument('--past_times_own_axis', type=bool, default=False, help='if additional input times are on own axis')
@@ -158,7 +158,11 @@ def setup(conf_exp=None):
     p.add_argument('--weight_decay', type=float, default=0., help='weight decay (L2 norm)')
     p.add_argument('--dropout_rate', type=float, default=0., help='Dropout')
     p.add_argument('--layerNorm', type=str, default='BN', help='normalization layer for some network architectures')
-    p.add_argument('--init', type=str, default='rand', help='string specfifying weight initialization for some models')
+    p.add_argument('--init_net', type=str, default='rand', help='string specfifying weight initialization for some models')
+    p.add_argument('--K_net', type=int, default='1', help='number of slow variables (grid cells) for some models')
+    p.add_argument('--J_net', type=int, default='0', help='number of fast variables (vertical levels) for some models')
+    p.add_argument('--dt_net', type=float, default='0.', help='numerical integration time step for some models')
+    p.add_argument('--alpha_net', type=float, default='0.5', help='predictor-corrector parameter for some models')
 
     args = p.parse_args() if conf_exp is None else p.parse_args(args=[])
     #args.var_dict = ast.literal_eval(args.var_dict)
