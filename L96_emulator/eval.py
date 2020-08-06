@@ -64,7 +64,12 @@ def load_model_from_exp_conf(res_dir, conf):
             'additiveResShortcuts' : conf['additiveResShortcuts'],
             'direct_shortcut' : conf['direct_shortcut'],
             'dropout_rate' : conf['dropout_rate'],
-            'layerNorm' : conf['layerNorm']
+            'layerNorm' : conf['layerNorm'],
+            'init_net' : conf['init_net'], 
+            'K_net' : conf['K_net'], 
+            'J_net' : conf['J_net'], 
+            'dt_net' : conf['dt_net'], 
+            'alpha_net' : conf['alpha_net']            
     }
 
     model, model_forward = named_network(model_name=conf['model_name'], 
