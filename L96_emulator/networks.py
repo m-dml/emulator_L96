@@ -652,7 +652,7 @@ class MinimalConvNetL96(torch.nn.Module):
                                  padding_mode='circular', 
                                  stride=1)
         self.layer2 = setup_conv(in_channels = 4*(J+1), 
-                                 out_channels = 1, 
+                                 out_channels = J+1, 
                                  kernel_size = 1, 
                                  bias = True, 
                                  padding_mode='circular', 
