@@ -3,6 +3,9 @@ import torch.nn.functional as F
 import numpy as np
 from .util import device, dtype, dtype_np
 
+def _pointwise_square(x):
+    return x**2
+
 def named_network(model_name, n_input_channels, n_output_channels, seq_length, **kwargs):
 
     if model_name in ['TinyNetwork', 'TinyResNet']:
@@ -530,7 +533,7 @@ class MinimalNetL96(torch.nn.Module):
         self.layer2 = torch.nn.Linear(in_features = 4*self.Ni, 
                                       out_features = self.Ni, 
                                       bias = True)
-        self.nonlinearity = lambda x: x**2
+        self.nonlinearity = _pointwise_square
 
         if init == 'analytical':
             if J > 0:
@@ -658,7 +661,7 @@ class MinimalConvNetL96(torch.nn.Module):
                                  padding_mode='circular', 
                                  stride=1)
 
-        self.nonlinearity = lambda x: x**2
+        self.nonlinearity = _pointwise_square
 
         if init == 'analytical':
             if J > 0:
