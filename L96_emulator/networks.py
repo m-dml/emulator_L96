@@ -91,7 +91,7 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
 
         def model_forward(x, mean_out=0., std_out=1.):
             """ predictor-corrector step """
-            ndim = x.ndim
+            ndim = len(x.shape)
             assert ndim == 3
 
             x = x * std_out + mean_out
@@ -103,8 +103,33 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
             x = (x - mean_out) / std_out
 
             return x
+        
+        model = torch.jit.script(model)
+        model_forwarder = Model_forwarder_predictorCorrector(model, dt=dt, alpha=alpha)
+        model_forwarder = torch.jit.script(model_forwarder)
 
-    return model, model_forward
+    return model, model_forwarder
+
+
+class Model_forwarder_predictorCorrector(torch.nn.Module):
+
+    def __init__(self, model, dt, alpha):
+        super(Model_forwarder_predictorCorrector, self).__init__()            
+        self.dt = dt
+        self.alpha = alpha
+        self.add_module('model', module=model)
+
+    def forward(self, x):
+        """ predictor-corrector step """
+        ndim = len(x.shape)
+        assert ndim == 3
+
+        f0 = self.model.forward(x) # ndim=3 for MinimalConvNet96
+        f1 = self.model.forward(x + self.dt*f0)
+
+        x = x + self.dt * (self.alpha*f0 + (1.-self.alpha)*f1)
+
+        return x
 
 
 class PeriodicConv1D(torch.nn.Conv1d):
@@ -680,9 +705,9 @@ class MinimalConvNetL96(torch.nn.Module):
 
     def forward(self, x):
 
-        assert x.ndim == 3 # (N, J, K), J 'channels', K locations
+        assert len(x.shape) == 3 # (N, J, K), J 'channels', K locations
 
         z = self.nonlinearity(self.layer1(x))
-        out = self.layer2(torch.cat((z, x), axis=1))
+        out = self.layer2(torch.cat((z, x), dim=1))
 
         return out

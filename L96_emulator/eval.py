@@ -11,23 +11,25 @@ import torch
 
 class Rollout(torch.nn.Module):
 
-    def __init__(self, model_forward, prediction_task, K, J, N, x_init=None):
+    def __init__(self, model_forwarder, prediction_task, K, J, N, T=1, x_init=None):
 
         super(Rollout, self).__init__()
 
-        self.model_forward = model_forward
+        self.model_forwarder = model_forwarder
         self.prediction_task = prediction_task
+
+        self.T = T
 
         x_init = np.random.normal(size=(N,K*(J+1))) if x_init is None else x_init
         assert x_init.ndim in [2,3]
         self.X = torch.nn.Parameter(torch.as_tensor(x_init, device=device, dtype=dtype))
 
-    def forward(self, T):
+    def forward(self):
 
         if self.prediction_task == 'state':
             x = self.X
-            for t in range(T):
-                x = self.model_forward(x)
+            for t in range(self.T):
+                x = self.model_forwarder.forward(x)
             return x
         else:
             raise NotImplementedError
