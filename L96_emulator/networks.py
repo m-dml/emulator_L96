@@ -86,34 +86,22 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
     elif model_name == 'MinimalConvNetL96':
 
         K, J = kwargs['K_net'], kwargs['J_net'], 
-        init, dt, alpha = kwargs['init_net'], kwargs['dt_net'], kwargs['alpha_net']
+        init, dt = kwargs['init_net'], kwargs['dt_net']
         model = MinimalConvNetL96(K, J, F=10., b=10., c=10., h=1., init=init)
 
-        def model_forward(x, mean_out=0., std_out=1.):
-            """ predictor-corrector step """
-            ndim = len(x.shape)
-            assert ndim == 3
-
-            x = x * std_out + mean_out
-
-            f0 = model.forward(x) # ndim=3 for MinimalConvNet96
-            f1 = model.forward(x + dt*f0)
-
-            x = x + dt * (alpha*f0 + (1-alpha)*f1)
-            x = (x - mean_out) / std_out
-
-            return x
-        
         model = torch.jit.script(model)
-        model_forwarder = Model_forwarder_predictorCorrector(model, dt=dt, alpha=alpha)
-        model_forwarder = torch.jit.script(model_forwarder)
+        if kwargs['model_forwarder'] == 'predictor_corrector':
+            alpha = kwargs['alpha_net']
+            model_forwarder = Model_forwarder_predictorCorrector(model, dt=dt, alpha=alpha)
+        elif kwargs['model_forwarder'] == 'rk4_default':
+            model_forwarder = Model_forwarder_rk4default(model, dt=dt)
 
-    return model, model_forwarder
+    return model, torch.jit.script(model_forwarder)
 
 
 class Model_forwarder_predictorCorrector(torch.nn.Module):
 
-    def __init__(self, model, dt, alpha):
+    def __init__(self, model, dt, alpha=0.5):
         super(Model_forwarder_predictorCorrector, self).__init__()            
         self.dt = dt
         self.alpha = alpha
@@ -121,13 +109,29 @@ class Model_forwarder_predictorCorrector(torch.nn.Module):
 
     def forward(self, x):
         """ predictor-corrector step """
-        ndim = len(x.shape)
-        assert ndim == 3
-
         f0 = self.model.forward(x) # ndim=3 for MinimalConvNet96
         f1 = self.model.forward(x + self.dt*f0)
 
         x = x + self.dt * (self.alpha*f0 + (1.-self.alpha)*f1)
+
+        return x
+
+
+class Model_forwarder_rk4default(torch.nn.Module):
+
+    def __init__(self, model, dt):
+        super(Model_forwarder_rk4default, self).__init__()            
+        self.dt = dt
+        self.add_module('model', module=model)
+
+    def forward(self, x):
+        """ Runke-Katta step with 2/6 rule """
+        f0 = self.model.forward(x) # ndim=3 for MinimalConvNet96
+        f1 = self.model.forward(x + self.dt/2.*f0)
+        f2 = self.model.forward(x + self.dt/2.*f1)
+        f3 = self.model.forward(x + self.dt * f2)
+
+        x = x + self.dt/6. * (f0 + 2.* (f1 + f2) + f3)
 
         return x
 
