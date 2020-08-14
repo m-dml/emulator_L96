@@ -101,23 +101,13 @@ class DatasetMultiTrial(Dataset):
             idx = [torch.arange(iter_start, iter_end, requires_grad=False, device='cpu') for j in range(self.N)]
             idx = torch.cat([j*self.T + idx[j] for j in range(len(idx))])
 
-        X = self.data[idx].reshape(-1,self.J,self.K) # reshapes time x n_trials into single axis ! 
-        y = self.data[idx+self.offset].reshape(-1,self.J,self.K)
-
+        X = self.data[idx].reshape(-1,self.J+1,self.K) # reshapes time x n_trials into single axis ! 
+        y = self.data[idx+self.offset].reshape(-1,self.J+1,self.K)
+        
         return zip(X, y)
 
     def __len__(self):
-        return (self.end - self.start) #self.data.shape[0]
-
-    def divide_workers(self):
-        """ parallelized data loading via torch.util.data.Dataloader """
-        if torch.utils.data.get_worker_info() is None:
-            iter_start = torch.tensor(self.start, requires_grad=False, dtype=torch.int, device='cpu')
-            iter_end = torch.tensor(self.end, requires_grad=False, dtype=torch.int, device='cpu')
-        else: 
-            raise NotImplementedError('had no need for parallelization yet')
-
-        return iter_start, iter_end
+        return self.N * (self.end - self.start) #self.data.shape[0]
 
 
 class DatasetRelPred(Dataset):
