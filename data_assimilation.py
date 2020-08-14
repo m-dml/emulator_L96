@@ -497,6 +497,7 @@ n_steps, lr, weight_decay = 1000, 1.0, 0.0
 loss_vals_LBFGS_full_backsolve = np.zeros(n_steps)
 time_vals_LBFGS_full_backsolve = time.time() * np.ones(n_steps)
 
+x_sols_backsolve = np.zeros((n_chunks, N, K*(J+1)))
 x_sols_LBFGS_full_backsolve = np.zeros((n_chunks, N, K*(J+1)))
 state_mses_LBFGS_full_backsolve = np.zeros(n_chunks)
 
@@ -516,6 +517,7 @@ for j in range(n_chunks):
     for i__ in range(len(n_starts)):
         out2 = rk4_default(fun=fun, y0=out[n_starts[i__]].copy(), times=times)
         x_init[i__] = out2[-1].copy()
+    x_sols_backsolve[j] = x_init.copy()
     time_vals_backsolve[j] = time.time() - time_vals_backsolve[j]
     state_mses_backsolve[j] = ((x_init - out[n_starts])**2).mean()
 
@@ -588,7 +590,13 @@ np.save(res_dir + 'results/data_assimilation/fullyobs_initstate_tests',
             'state_mses_LBFGS_full_persistence' : state_mses_LBFGS_full_persistence,
             'state_mses_LBFGS_full_chunks' :      state_mses_LBFGS_full_chunks,
             'state_mses_LBFGS_chunks' :           state_mses_LBFGS_chunks,
-            'state_mses_backsolve' :              state_mse_backsolve,
+            'state_mses_backsolve' :              state_mses_backsolve,
+            
+            'x_sols_LBFGS_full_backsolve' : x_sols_LBFGS_full_backsolve, 
+            'x_sols_LBFGS_full_persistence' : x_sols_LBFGS_full_persistence,
+            'x_sols_LBFGS_full_chunks' : x_sols_LBFGS_full_chunks,
+            'x_sols_LBFGS_chunks' : x_sols_LBFGS_chunks,
+            'x_sols_backsolve' : x_sols_backsolve
             })
 """
 res = np.load(res_dir + 'results/data_assimilation/fullyobs_initstate_tests.npy', allow_pickle=True)[()]
