@@ -101,8 +101,8 @@ class DatasetMultiTrial(Dataset):
             idx = [torch.arange(iter_start, iter_end, requires_grad=False, device='cpu') for j in range(self.N)]
             idx = torch.cat([j*self.T + idx[j] for j in range(len(idx))])
 
-        X = self.data[idx].reshape(-1,J,K) # reshapes time x n_trials into single axis ! 
-        y = self.data[idx+self.offset].reshape(-1,J,K)
+        X = self.data[idx].reshape(-1,self.J,self.K) # reshapes time x n_trials into single axis ! 
+        y = self.data[idx+self.offset].reshape(-1,self.J,self.K)
 
         return zip(X, y)
 

@@ -38,14 +38,14 @@ def run_exp(exp_id, datadir, res_dir,
     commit_id = fetch_commit.communicate()[0].strip().decode("utf-8")
     fetch_commit.kill()
 
-    # load data
+    # load data    
     if N_trials > 1:
         fn_data = f'out_K{K}_J{J}_T{T}_N{N_trials}_dt0_{str(dt)[2:]}'
     else:
         fn_data = f'out_K{K}_J{J}_T{T}_dt0_{str(dt)[2:]}'
     out = np.load(datadir + fn_data + '.npy')
     print('data.shape', out.shape)
-    assert (out.shape[0]-1)*dt == T
+    assert (out.shape[1]-1)*dt == T
 
     DatasetClass = sel_dataset_class(prediction_task, N_trials)
     test_frac = 1. - (train_frac + validation_frac)
@@ -54,10 +54,10 @@ def run_exp(exp_id, datadir, res_dir,
 
     dg_train = DatasetClass(data=out, J=J, offset=lead_time, normalize=bool(normalize_data), 
                        start=spin_up, 
-                       end=int(np.floor(out.shape[0]*train_frac)))
+                       end=int(np.floor(T/dt*train_frac)))
     dg_val   = DatasetClass(data=out, J=J, offset=lead_time, normalize=bool(normalize_data), 
-                       start=int(np.ceil(out.shape[0]*train_frac)), 
-                       end=int(np.floor(out.shape[0]*(train_frac+validation_frac))))
+                       start=int(np.ceil(T/dt*train_frac)),
+                       end=int(np.ceil(T/dt*(train_frac+validation_frac))))
 
     print('N training data:', len(dg_train))
     print('N validation data:', len(dg_val))
