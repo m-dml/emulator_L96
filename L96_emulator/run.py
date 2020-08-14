@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from .util import init_torch_device
 from .networks import named_network
-from .dataset import Dataset, DatasetRelPred, DatasetRelPredPast
+from .dataset import Dataset, DatasetMultiTrial, DatasetRelPred, DatasetRelPredPast
 from .train import train_model, loss_function
 from configargparse import ArgParser
 import ast
@@ -14,21 +14,19 @@ def mkdir_from_path(dir):
     if not os.path.exists(dir):
         os.mkdir(dir)
 
-def sel_dataset_class(prediction_task):
+def sel_dataset_class(prediction_task,N_trials):
 
-    if prediction_task == 'state':
+    if prediction_task == 'state' and N_trials==1:
         DatasetClass = Dataset
-    elif prediction_task == 'update':
-        DatasetClass = DatasetRelPred
-    elif prediction_task == 'update_with_past':
-        DatasetClass = DatasetRelPredPast
+    elif prediction_task == 'state' and N_trials>1:
+        DatasetClass = DatasetMultiTrial
     else:
         raise NotImplementedError()
 
     return DatasetClass
 
 def run_exp(exp_id, datadir, res_dir,
-            K, J, T, dt,
+            K, J, T, N_trials, dt,
             prediction_task, lead_time, seq_length, train_frac, validation_frac, spin_up_time,            
             model_name, loss_fun, weight_decay, batch_size, max_epochs, eval_every, max_patience,
             lr, lr_min, lr_decay, max_lr_patience, only_eval, normalize_data, **net_kwargs):
@@ -41,12 +39,15 @@ def run_exp(exp_id, datadir, res_dir,
     fetch_commit.kill()
 
     # load data
-    fn_data = f'out_K{K}_J{J}_T{T}_dt0_{str(dt)[2:]}'
+    if N_trials > 1:
+        fn_data = f'out_K{K}_J{J}_T{T}_N{N_trials}_dt0_{str(dt)[2:]}'
+    else:
+        fn_data = f'out_K{K}_J{J}_T{T}_dt0_{str(dt)[2:]}'
     out = np.load(datadir + fn_data + '.npy')
     print('data.shape', out.shape)
     assert (out.shape[0]-1)*dt == T
 
-    DatasetClass = sel_dataset_class(prediction_task)
+    DatasetClass = sel_dataset_class(prediction_task, N_trials)
     test_frac = 1. - (train_frac + validation_frac)
     assert test_frac > 0.
     spin_up = int(spin_up_time/dt)
@@ -125,6 +126,7 @@ def setup(conf_exp=None):
     p.add_argument('--J', type=int, required=True, help='number of fast variables (vertical levels)')
     p.add_argument('--T', type=int, required=True, help='length of simulation data (in time units [s])')
     p.add_argument('--dt', type=float, required=True, help='simulation step length (in time units [s])')
+    p.add_argument('--N_trials', type=int, default=1, help='number of random starting points for solver')
 
     p.add_argument('--prediction_task', type=str, required=True, help='string specifying prediction task')
     p.add_argument('--lead_time', type=int, required=True, help='forecast lead time (in time steps)')
@@ -161,6 +163,7 @@ def setup(conf_exp=None):
     p.add_argument('--init_net', type=str, default='rand', help='string specfifying weight initialization for some models')
     p.add_argument('--K_net', type=int, default='1', help='number of slow variables (grid cells) for some models')
     p.add_argument('--J_net', type=int, default='0', help='number of fast variables (vertical levels) for some models')
+    p.add_argument('--model_forwarder', type=str, default='predictor_corrector', help='numerical solver scheme for model')    
     p.add_argument('--dt_net', type=float, default='0.', help='numerical integration time step for some models')
     p.add_argument('--alpha_net', type=float, default='0.5', help='predictor-corrector parameter for some models')
 
