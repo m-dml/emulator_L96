@@ -28,7 +28,7 @@ max_epochs: 2000
 model_name: MinimalConvNetL96
 filters: [0]
 kernel_sizes: [4]
-init_net: analytic
+init_net: analytical
 K_net: 36
 J_net: 10
 model_forwarder: rk4_default
