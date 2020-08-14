@@ -564,6 +564,7 @@ class MinimalNetL96(torch.nn.Module):
                                       bias = True)
         self.nonlinearity = _pointwise_square
 
+        assert init in ['analytical', 'rand']
         if init == 'analytical':
             if J > 0:
                 model_np = AnalyticModel_twoLevel(K=K, J=J, 
