@@ -70,7 +70,6 @@ class DatasetMultiTrial(Dataset):
         assert data.shape[-1]/(J+1) == self.K
         self.data = sortL96intoChannels(data.reshape(-1,self.K*(self.J+1)),J=J) # N*T, J+1, K
 
-
         self.offset = offset
         if start is None or end is None:
             start, end = 0,  self.data.shape[0]-self.offset
@@ -82,7 +81,7 @@ class DatasetMultiTrial(Dataset):
         if self.normalize:
             self.mean = self.data.mean(axis=(0,2)).reshape(1,-1,1)
             self.std = self.data.std(axis=(0,2)).reshape(1,-1,1)
-            self.data = (self.data - self.mean) / self.std 
+            self.data = (self.data - self.mean) / self.std
 
         self.randomize_order = randomize_order
 
@@ -97,13 +96,13 @@ class DatasetMultiTrial(Dataset):
         if self.randomize_order:
             idx = [torch.randperm(iter_end - iter_start, device='cpu') for j in range(self.N)]
             idx = torch.cat([j*self.T + iter_start + idx[j] for j in range(len(idx))])
-        else: 
+        else:
             idx = [torch.arange(iter_start, iter_end, requires_grad=False, device='cpu') for j in range(self.N)]
             idx = torch.cat([j*self.T + idx[j] for j in range(len(idx))])
 
-        X = self.data[idx].reshape(-1,self.J+1,self.K) # reshapes time x n_trials into single axis ! 
+        X = self.data[idx].reshape(-1,self.J+1,self.K) # reshapes time x n_trials into single axis !
         y = self.data[idx+self.offset].reshape(-1,self.J+1,self.K)
-        
+
         return zip(X, y)
 
     def __len__(self):
