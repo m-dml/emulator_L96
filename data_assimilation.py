@@ -23,10 +23,10 @@ import sys
 import time
 
 from L96_emulator.util import dtype, dtype_np, device
-from L96_emulator.util import sortL96fromChannels, sortL96intoChannels, sel_dataset_class
+from L96_emulator.util import sortL96fromChannels, sortL96intoChannels
 from L96_emulator.util import predictor_corrector, rk4_default, get_data
 
-from L96_emulator.run import setup
+from L96_emulator.run import setup, sel_dataset_class
 
 from L96_emulator.eval import load_model_from_exp_conf, get_rollout_fun, Rollout
 
@@ -53,10 +53,10 @@ print('conf_exp', conf_exp)
 model_forwarder = 'rk4_default'
 dt_net = dt
 
-n_starts = np.arange(int(spin_up_time/dt), int(train_frac*out.shape[0]), 2* int(spin_up_time/dt))
+n_starts = np.arange(int(spin_up_time/dt), int(train_frac*T/dt), 2* int(spin_up_time/dt))
 T_rollout, N = 40, len(n_starts)
 n_chunks = 10
-n_steps = 1000
+n_steps = 1000 # total number of gradient steps (across all chunks !)
 
 back_solve_dt_fac = 100
 
@@ -123,7 +123,7 @@ for j in range(n_chunks):
     x_inits[j] = sortL96fromChannels(roller_outer_LBFGS_chunks.X.detach().cpu().numpy().copy())
     optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_chunks.parameters(), 
                                   lr=lbfgs_pars['lr'], 
-                                  max_iter=lbfgs_pars['max_inter'], 
+                                  max_iter=lbfgs_pars['max_iter'], 
                                   max_eval=lbfgs_pars['max_eval'], 
                                   tolerance_grad=lbfgs_pars['tolerance_grad'], 
                                   tolerance_change=lbfgs_pars['tolerance_change'], 
@@ -184,7 +184,7 @@ for j in range(n_chunks):
                                         N=N, T=(j+1)*T_rollout//n_chunks, x_init=x_init)
     optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_full_persistence.parameters(),
                                   lr=lbfgs_pars['lr'], 
-                                  max_iter=lbfgs_pars['max_inter'], 
+                                  max_iter=lbfgs_pars['max_iter'], 
                                   max_eval=lbfgs_pars['max_eval'], 
                                   tolerance_grad=lbfgs_pars['tolerance_grad'], 
                                   tolerance_change=lbfgs_pars['tolerance_change'], 
@@ -234,7 +234,7 @@ for j in range(n_chunks):
                                         N=N, T=(j+1)*T_rollout//n_chunks, x_init=x_init)
     optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_full_chunks.parameters(), 
                                   lr=lbfgs_pars['lr'], 
-                                  max_iter=lbfgs_pars['max_inter'], 
+                                  max_iter=lbfgs_pars['max_iter'], 
                                   max_eval=lbfgs_pars['max_eval'], 
                                   tolerance_grad=lbfgs_pars['tolerance_grad'], 
                                   tolerance_change=lbfgs_pars['tolerance_change'], 
@@ -308,7 +308,7 @@ for j in range(n_chunks):
                                         x_init=sortL96intoChannels(x_init,J=J))
     optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_full_backsolve.parameters(), 
                                   lr=lbfgs_pars['lr'], 
-                                  max_iter=lbfgs_pars['max_inter'], 
+                                  max_iter=lbfgs_pars['max_iter'], 
                                   max_eval=lbfgs_pars['max_eval'], 
                                   tolerance_grad=lbfgs_pars['tolerance_grad'], 
                                   tolerance_change=lbfgs_pars['tolerance_change'], 
@@ -344,7 +344,8 @@ for j in range(n_chunks):
 initial_states = [out[n_starts+j*T_rollout//n_chunks] for j in range(n_chunks)]
 initial_states = np.stack([sortL96intoChannels(z,J=J) for z in initial_states])
 
-np.save(res_dir + f'results/data_assimilation/fullyobs_initstate_tests_exp{exp_id}_{model_forwarder}',
+model_forwarder_str = args['model_forwarder']
+np.save(res_dir + f'results/data_assimilation/fullyobs_initstate_tests_exp{exp_id}_{model_forwarder_str}',
         arr={
             'K' : K,
             'J' : J,
@@ -361,8 +362,8 @@ np.save(res_dir + f'results/data_assimilation/fullyobs_initstate_tests_exp{exp_i
             'lead_time' : lead_time,
 
             'conf_exp' : conf_exp,
-            'model_forwarder' : model_forwarder,
-            'dt_net' : dt_net,
+            'model_forwarder' : args['model_forwarder'], # should still be string
+            'dt_net' : args['dt_net'],
             'back_solve_dt_fac' : back_solve_dt_fac,
             
             'n_starts' : n_starts,
