@@ -28,7 +28,7 @@ from L96_emulator.util import predictor_corrector, rk4_default, get_data
 
 from L96_emulator.run import setup, sel_dataset_class
 
-from L96_emulator.eval import load_model_from_exp_conf, get_rollout_fun, Rollout, named_network
+from L96_emulator.eval import load_model_from_exp_conf, get_rollout_fun, optim_initial_state, named_network
 
 import L96sim
 from L96sim.L96_base import f1, f2, pf2
@@ -44,7 +44,7 @@ F, h, b, c = 10., 1., 10., 10.
 lead_time = 1
 prediction_task = 'state'
 
-exp_id = None
+exp_id = 20
 model_forwarder = 'rk4_default'
 dt_net = dt
 
@@ -86,22 +86,24 @@ else:
 
     model, model_forwarder, _ = load_model_from_exp_conf(res_dir, args)
 
+# switch off parameter gradients for model:
+for x in model.parameters():
+    x.requires_grad = False
 
 n_starts = np.arange(int(spin_up_time/dt), int(train_frac*T/dt), 2* int(spin_up_time/dt))
 T_rollout, N = 40, len(n_starts)
-n_chunks = 10
+n_chunks = 40
 n_steps = 1000 # total number of gradient steps (across all chunks !)
 
 back_solve_dt_fac = 100
 
 lbfgs_pars = {'n_steps' : n_steps//n_chunks,
               'lr' : 1.0,
-              'max_iter' : 100,
+              'max_iter' : 10000,
               'max_eval' : None,
               'tolerance_grad' : 1e-07, 
               'tolerance_change' : 1e-09, 
-              'history_size': 50,
-              'line_search_fn': 'strong_wolfe'} 
+              'history_size': 100}
 
 
 # # Solving a fully-observed inverse problem
@@ -124,71 +126,19 @@ print('\n')
 print('L-BFGS, split rollout time into chunks, solve sequentially from end to beginning')
 print('\n')
 
-loss_vals_LBFGS_chunks = np.zeros(n_steps)
-time_vals_LBFGS_chunks = time.time() * np.ones(n_steps)
-loss_vals_LBFGS_chunks_rollout = np.zeros_like(loss_vals_LBFGS_chunks)
+T_rollouts = np.ones(n_chunks, dtype=np.int) * (T_rollout//n_chunks)
+x_inits, targets = [None for i in range(n_chunks)], [None for i in range(n_chunks)]
+x_inits[0] = sortL96intoChannels(np.atleast_2d(out[n_starts+T_rollout].copy()),J=J)
+targets[0] = out[n_starts+T_rollout].copy()
+grndtrths = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)] for j in range(n_chunks)]
 
-x_sols_LBFGS_chunks = np.zeros((n_chunks, N, K*(J+1)))
-state_mses_LBFGS_chunks = np.zeros(n_chunks)
+res = optim_initial_state(
+      model_forwarder, K, J, N,
+      n_steps, lbfgs_pars,
+      x_inits, targets, grndtrths,
+      out, n_starts, T_rollouts, n_chunks)
 
-grndtrth_rollout = sortL96intoChannels(torch.as_tensor(out[n_starts], dtype=dtype, device=device), J=J)
-target_rollout = sortL96intoChannels(torch.as_tensor(out[n_starts+T_rollout], dtype=dtype, device=device),J=J)
-
-x_inits = np.zeros((n_chunks, N, K*(J+1)))
-x_init = sortL96intoChannels(np.atleast_2d(out[n_starts+T_rollout].copy()),J=J)
-targets = np.zeros((n_chunks, N, K*(J+1)))
-targets[0] = out[n_starts+T_rollout]
-
-i_ = 0
-for j in range(n_chunks):
-    roller_outer_LBFGS_chunks = Rollout(model_forwarder, prediction_task='state', K=K, J=J, 
-                                        N=N, T=(T_rollout//n_chunks), 
-                                        x_init=x_init)
-    x_inits[j] = sortL96fromChannels(roller_outer_LBFGS_chunks.X.detach().cpu().numpy().copy())
-    optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_chunks.parameters(), 
-                                  lr=lbfgs_pars['lr'], 
-                                  max_iter=lbfgs_pars['max_iter'], 
-                                  max_eval=lbfgs_pars['max_eval'], 
-                                  tolerance_grad=lbfgs_pars['tolerance_grad'], 
-                                  tolerance_change=lbfgs_pars['tolerance_change'], 
-                                  history_size=lbfgs_pars['history_size'], 
-                                  line_search_fn=lbfgs_pars['line_search_fn'])
-
-    target = sortL96intoChannels(torch.as_tensor(targets[j], dtype=dtype, device=device),J=J)
-    roller_outer_LBFGS_chunks.train()
-    for i in range(n_steps//n_chunks):
-
-        loss = ((roller_outer_LBFGS_chunks.forward() - target)**2).mean()
-        
-        if torch.isnan(loss):
-            loss_vals_LBFGS_chunks[i_] = loss.detach().cpu().numpy()
-            i_ += 1
-            continue
-
-        def closure():
-            loss = ((roller_outer_LBFGS_chunks.forward() - target)**2).mean()
-            optimizer.zero_grad()
-            loss.backward()
-            return loss            
-        optimizer.step(closure)        
-        loss_vals_LBFGS_chunks[i_] = loss.detach().cpu().numpy()
-        time_vals_LBFGS_chunks[i_] = time.time() - time_vals_LBFGS_chunks[i_]
-        print((time_vals_LBFGS_chunks[i_], loss_vals_LBFGS_chunks[i_]))
-
-        roller_outer_LBFGS_chunks.T = (j+1)*T_rollout//n_chunks
-        loss = ((roller_outer_LBFGS_chunks.forward() - target_rollout)**2).mean()
-        loss_vals_LBFGS_chunks_rollout[i_] = loss.detach().cpu().numpy().copy()
-
-        i_ += 1
-
-    x_init = roller_outer_LBFGS_chunks.X.detach().cpu().numpy().copy()
-    if j < n_chunks - 1:
-        targets[j+1] = sortL96fromChannels(roller_outer_LBFGS_chunks.X.detach().cpu().numpy().copy())
-
-    x_sols_LBFGS_chunks[j] = sortL96fromChannels(roller_outer_LBFGS_chunks.X.detach().cpu().numpy().copy())
-    grndtrth = out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)]
-    state_mses_LBFGS_chunks[j] = ((x_sols_LBFGS_chunks[j] - grndtrth)**2).mean()
-
+x_sols_LBFGS_chunks, loss_vals_LBFGS_chunks, time_vals_LBFGS_chunks, state_mses_LBFGS_chunks = res
 
 # ## L-BFGS, solve across full rollout time in one go, initialize from chunked approach
 
@@ -197,52 +147,21 @@ print('L-BFGS, solve across full rollout time in one go, initialize from chunked
 print('\n')
 
 loss_vals_LBFGS_full_chunks = np.zeros(n_steps)
-time_vals_LBFGS_full_chunks = time.time() * np.ones(n_steps)
 
-x_sols_LBFGS_full_chunks = np.zeros((n_chunks, N, K*(J+1)))
-state_mses_LBFGS_full_chunks = np.zeros(n_chunks)
 
-target = sortL96intoChannels(torch.as_tensor(out[n_starts+T_rollout], dtype=dtype, device=device), J=J)
+T_rollouts = np.arange(1, n_chunks+1) * (T_rollout//n_chunks)
+x_inits = x_sols_LBFGS_chunks
+target = sortL96intoChannels(torch.as_tensor(out[n_starts+T_rollout],
+                                             dtype=dtype, device=device), J=J)
+targets = [target.copy() for i in range(n_chunks)]
 
-i_ = 0
-for j in range(n_chunks):
+res = optim_initial_state(
+      model_forwarder, K, J, N,
+      n_steps, lbfgs_pars,
+      x_inits, targets, grndtrths,
+      out, n_starts, T_rollouts, n_chunks)
 
-    x_init = sortL96intoChannels(x_sols_LBFGS_chunks[j], J=J)
-    roller_outer_LBFGS_full_chunks = Rollout(model_forwarder, prediction_task='state', K=K, J=J, 
-                                        N=N, T=(j+1)*T_rollout//n_chunks, x_init=x_init)
-    optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_full_chunks.parameters(), 
-                                  lr=lbfgs_pars['lr'], 
-                                  max_iter=lbfgs_pars['max_iter'], 
-                                  max_eval=lbfgs_pars['max_eval'], 
-                                  tolerance_grad=lbfgs_pars['tolerance_grad'], 
-                                  tolerance_change=lbfgs_pars['tolerance_change'], 
-                                  history_size=lbfgs_pars['history_size'], 
-                                  line_search_fn=lbfgs_pars['line_search_fn'])
-
-    roller_outer_LBFGS_full_chunks.train()
-    for i in range(n_steps//n_chunks):
-
-        loss = ((roller_outer_LBFGS_full_chunks.forward() - target)**2).mean()
-        
-        if torch.isnan(loss):
-            loss_vals_LBFGS_full_chunks[i_] = loss.detach().cpu().numpy()
-            i_ += 1
-            continue
-
-        def closure():
-            loss = ((roller_outer_LBFGS_full_chunks.forward() - target)**2).mean()
-            optimizer.zero_grad()
-            loss.backward()
-            return loss            
-        optimizer.step(closure)        
-        loss_vals_LBFGS_full_chunks[i_] = loss.detach().cpu().numpy()
-        time_vals_LBFGS_full_chunks[i_] = time.time() - time_vals_LBFGS_full_chunks[i_]
-        print((time_vals_LBFGS_full_chunks[i_], loss_vals_LBFGS_full_chunks[i_]))
-        i_ += 1
-
-    x_sols_LBFGS_full_chunks[j] = sortL96fromChannels(roller_outer_LBFGS_full_chunks.X.detach().cpu().numpy().copy())
-    grndtrth = out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)]
-    state_mses_LBFGS_full_chunks[j] = ((x_sols_LBFGS_full_chunks[j] - grndtrth)**2).mean()
+x_sols_LBFGS_full_chunks, loss_vals_LBFGS_full_chunks, time_vals_LBFGS_full_chunks, state_mses_LBFGS_full_chunks = res
 
 
 # ## L-BFGS, solve across full rollout time in one go, initiate from backward solution
@@ -258,70 +177,30 @@ if J > 0:
 else:
     def fun(t, x):
         return - f1(x, F, dX_dt, K)
-
-loss_vals_LBFGS_full_backsolve = np.zeros(n_steps)
-time_vals_LBFGS_full_backsolve = time.time() * np.ones(n_steps)
-
-x_sols_backsolve = np.zeros((n_chunks, N, K*(J+1)))
-x_sols_LBFGS_full_backsolve = np.zeros((n_chunks, N, K*(J+1)))
-state_mses_LBFGS_full_backsolve = np.zeros(n_chunks)
-
-target = sortL96intoChannels(torch.as_tensor(out[n_starts+T_rollout], dtype=dtype, device=device), J=J)
-x_init = np.zeros((len(n_starts), K*(J+1)))
-
 state_mses_backsolve = np.zeros(n_chunks)
 time_vals_backsolve = np.zeros(n_chunks)
-
 i_ = 0
 for j in range(n_chunks):
     
-    T_i = (j+1)*T_rollout//n_chunks
+    T_i = T_rollouts[j]
     times = dt * np.linspace(0, T_i, back_solve_dt_fac * T_i+1) # note the increase in temporal resolution!
     print('backward solving')
     time_vals_backsolve[j] = time.time()
     for i__ in range(len(n_starts)):
-        out2 = rk4_default(fun=fun, y0=out[n_starts[i__]].copy(), times=times)
+        out2 = rk4_default(fun=fun, y0=out[n_starts[i__]+T_rollout].copy(), times=times)
         x_init[i__] = out2[-1].copy()
     x_sols_backsolve[j] = x_init.copy()
     time_vals_backsolve[j] = time.time() - time_vals_backsolve[j]
     state_mses_backsolve[j] = ((x_init - out[n_starts])**2).mean()
 
-    roller_outer_LBFGS_full_backsolve = Rollout(model_forwarder, prediction_task='state', K=K, J=J, 
-                                        N=N, T=(j+1)*T_rollout//n_chunks, 
-                                        x_init=sortL96intoChannels(x_init,J=J))
-    optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_full_backsolve.parameters(), 
-                                  lr=lbfgs_pars['lr'], 
-                                  max_iter=lbfgs_pars['max_iter'], 
-                                  max_eval=lbfgs_pars['max_eval'], 
-                                  tolerance_grad=lbfgs_pars['tolerance_grad'], 
-                                  tolerance_change=lbfgs_pars['tolerance_change'], 
-                                  history_size=lbfgs_pars['history_size'], 
-                                  line_search_fn=lbfgs_pars['line_search_fn'])
+x_inits = x_sols_backsolve
+res = optim_initial_state(
+      model_forwarder, K, J, N,
+      n_steps, lbfgs_pars,
+      x_inits, targets, grndtrths,
+      out, n_starts, T_rollouts, n_chunks)
 
-    roller_outer_LBFGS_full_backsolve.train()
-    for i in range(n_steps//n_chunks):
-
-        loss = ((roller_outer_LBFGS_full_backsolve.forward() - target)**2).mean()
-        
-        if torch.isnan(loss):
-            loss_vals_LBFGS_full_backsolve[i_] = loss.detach().cpu().numpy()
-            i_ += 1
-            continue
-
-        def closure():
-            loss = ((roller_outer_LBFGS_full_backsolve.forward() - target)**2).mean()
-            optimizer.zero_grad()
-            loss.backward()
-            return loss            
-        optimizer.step(closure)        
-        loss_vals_LBFGS_full_backsolve[i_] = loss.detach().cpu().numpy()
-        time_vals_LBFGS_full_backsolve[i_] = time.time() - time_vals_LBFGS_full_backsolve[i_]
-        print((time_vals_LBFGS_full_backsolve[i_], loss_vals_LBFGS_full_backsolve[i_]))
-        i_ += 1
-        
-    x_sols_LBFGS_full_backsolve[j] = sortL96fromChannels(roller_outer_LBFGS_full_backsolve.X.detach().cpu().numpy().copy())
-    grndtrth = out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)]
-    state_mses_LBFGS_full_backsolve[j] = ((x_sols_LBFGS_full_backsolve[j] - grndtrth)**2).mean()
+x_sols_LBFGS_full_backsolve, loss_vals_LBFGS_full_backsolve, time_vals_LBFGS_full_backsolve, state_mses_full_backsolve = res
 
 
 # ## L-BFGS, solve across full rollout time in one go
@@ -331,53 +210,15 @@ print('\n')
 print('L-BFGS, solve across full rollout time in one go')
 print('\n')
 
-loss_vals_LBFGS_full_persistence = np.zeros(n_steps)
-time_vals_LBFGS_full_persistence = time.time() * np.ones(n_steps)
-
-x_sols_LBFGS_full_persistence = np.zeros((n_chunks, N, K*(J+1)))
-state_mses_LBFGS_full_persistence = np.zeros(n_chunks)
-
 x_init = sortL96intoChannels(out[n_starts+T_rollout].copy(), J=J)
-target = sortL96intoChannels(torch.as_tensor(out[n_starts+T_rollout], dtype=dtype, device=device), J=J)
+x_inits = [x_init for j in range(n_chunks)]
+res = optim_initial_state(
+      model_forwarder, K, J, N,
+      n_steps, lbfgs_pars,
+      x_inits, targets, grndtrths,
+      out, n_starts, T_rollouts, n_chunks)
 
-i_ = 0
-for j in range(n_chunks):
-
-    roller_outer_LBFGS_full_persistence = Rollout(model_forwarder, prediction_task='state', K=K, J=J, 
-                                        N=N, T=(j+1)*T_rollout//n_chunks, x_init=x_init)
-    optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_full_persistence.parameters(),
-                                  lr=lbfgs_pars['lr'], 
-                                  max_iter=lbfgs_pars['max_iter'], 
-                                  max_eval=lbfgs_pars['max_eval'], 
-                                  tolerance_grad=lbfgs_pars['tolerance_grad'], 
-                                  tolerance_change=lbfgs_pars['tolerance_change'], 
-                                  history_size=lbfgs_pars['history_size'], 
-                                  line_search_fn=lbfgs_pars['line_search_fn'])
-
-    roller_outer_LBFGS_full_persistence.train()
-    for i in range(n_steps//n_chunks):
-
-        loss = ((roller_outer_LBFGS_full_persistence.forward() - target)**2).mean()
-        
-        if torch.isnan(loss):
-            loss_vals_LBFGS_full_persistence[i_] = loss.detach().cpu().numpy()
-            i_ += 1
-            continue
-
-        def closure():
-            loss = ((roller_outer_LBFGS_full_persistence.forward() - target)**2).mean()
-            optimizer.zero_grad()
-            loss.backward()
-            return loss            
-        optimizer.step(closure)        
-        loss_vals_LBFGS_full_persistence[i_] = loss.detach().cpu().numpy()
-        time_vals_LBFGS_full_persistence[i_] = time.time() - time_vals_LBFGS_full_persistence[i_]
-        print((time_vals_LBFGS_full_persistence[i_], loss_vals_LBFGS_full_persistence[i_]))
-        i_ += 1
-
-    x_sols_LBFGS_full_persistence[j] = sortL96fromChannels(roller_outer_LBFGS_full_persistence.X.detach().cpu().numpy().copy())
-    grndtrth = out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)]
-    state_mses_LBFGS_full_persistence[j] = ((x_sols_LBFGS_full_persistence[j] - grndtrth)**2).mean()
+x_sols_LBFGS_full_persistence, loss_vals_LBFGS_full_persistence, time_vals_full_persistence, state_mses_full_persistence = res
 
 
 # ## plot and compare results
