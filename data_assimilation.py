@@ -28,7 +28,7 @@ from L96_emulator.util import predictor_corrector, rk4_default, get_data
 
 from L96_emulator.run import setup, sel_dataset_class
 
-from L96_emulator.eval import load_model_from_exp_conf, get_rollout_fun, Rollout
+from L96_emulator.eval import load_model_from_exp_conf, get_rollout_fun, Rollout, named_network
 
 import L96sim
 from L96sim.L96_base import f1, f2, pf2
