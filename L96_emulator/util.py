@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from L96sim.L96_base import f1, f2, pf2
 
 def init_torch_device():
     if torch.cuda.is_available():
@@ -72,3 +73,45 @@ def rk4_default(fun, y0, times):
         y[i] = y[i-1] + dt/6. * (f0 + 2.*f1 + 2.*f2 + f3)
         
     return y
+
+def get_data(K, J, T, dt, N_trials=1, F=10., h=1., b=10., c=10., 
+             resimulate=True, solver=rk4_default, save_sim=False, data_dir=None):
+
+    if N_trials > 1:
+        fn_data = f'out_K{K}_J{J}_T{T}_N{N_trials}_dt0_{str(dt)[2:]}'
+    else:
+        fn_data = f'out_K{K}_J{J}_T{T}_dt0_{str(dt)[2:]}'
+
+    if J > 0:
+        if N_trials > 1:
+            def fun(t, x):
+                return pf2(x, F, h, b, c, dX_dt, K, J)
+        else:
+            def fun(t, x):
+                return f2(x, F, h, b, c, dX_dt, K, J)
+    else:
+        def fun(t, x):
+            return f1(x, F, dX_dt, K)
+
+    times = np.linspace(0, T, int(np.floor(T/dt)+1))
+    if resimulate:
+        print('simulating data')
+        X_init = F * (0.5 + np.random.randn(K*(J+1),N_trials) * 1.0).astype(dtype=dtype_np) / np.maximum(J,50)
+        X_init = X_init[:,0] if N_trials == 1 else X_init
+        dX_dt = np.empty(X_init.shape, dtype=X_init.dtype)
+
+        out = solver(fun=fun, y0=X_init.copy(), times=times)
+        if N_trials > 1:
+            out = out.transpose(2,0,1)
+
+        # filename for data storage
+        if save_sim: 
+            assert not data_dir is None
+            np.save(data_dir + fn_data, out.astype(dtype=dtype_np))
+    else:
+        print('loading data')
+        out = np.load(data_dir + fn_data + '.npy')
+        X_init = out[0].copy() if N_trials == 1 else out[:,0,:].copy()
+        dX_dt = None
+
+    return out, {'times' : times, 'X_init' : X_init, 'dX_dt' : dX_dt}

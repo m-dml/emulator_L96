@@ -35,44 +35,18 @@ data_dir = '/gpfs/work/nonnenma/data/emulators/L96/'
 # In[2]:
 
 
-from L96sim.L96_base import f1, f2, J1, J1_init, f1_juliadef, f2_juliadef
-from L96_emulator.util import predictor_corrector, rk4_default
+from L96_emulator.util import predictor_corrector, rk4_default, get_data
 from L96_emulator.run import sel_dataset_class
 
-try: 
-    K, J, T, dt = args['K'], args['J'], args['T'], args['dt']
-    spin_up_time, train_frac = args['spin_up_time'], args['train_frac']
-    normalize_data = bool(args['normalize_data'])
-except:
-    K, J, T, dt = 36, 10, 605, 0.01
-    spin_up_time, train_frac = 5., 0.8
-    normalize_data = False
+K, J, T, dt, N_trials = 36, 10, 605, 0.01, 1
+spin_up_time, train_frac = 5., 0.8
+normalize_data = False
 
 F, h, b, c = 10, 1, 10, 10
 
-fn_data = f'out_K{K}_J{J}_T{T}_dt0_{str(dt)[2:]}'
-if J > 0:
-    def fun(t, x):
-        return f2(x, F, h, b, c, dX_dt, K, J)
-else:
-    def fun(t, x):
-        return f1(x, F, dX_dt, K)
-
-resimulate, save_sim = True, False
-if resimulate:
-    print('simulating data')
-    X_init = F * (0.5 + np.random.randn(K*(J+1)) * 1.0).astype(dtype=dtype_np) / np.maximum(J,50)
-    dX_dt = np.empty(X_init.size, dtype=X_init.dtype)
-    times = np.linspace(0, T, int(np.floor(T/dt)+1))
-    
-    out = rk4_default(fun=fun, y0=X_init.copy(), times=times)
-
-    # filename for data storage
-    if save_sim: 
-        np.save(data_dir + fn_data, out.astype(dtype=dtype_np))
-else:
-    print('loading data')
-    out = np.load(data_dir + fn_data + '.npy')
+out, datagen_dict = get_data(K=K, J=J, T=T, dt=dt, N_trials=N_trials, F=F, h=h, b=b, c=c, 
+                             resimulate=True, solver=rk4_default,
+                             save_sim=False, data_dir=data_dir)
 
 """
 plt.figure(figsize=(8,4))
@@ -143,14 +117,15 @@ if not training_outputs is None:
     """
 
 from L96_emulator.eval import sortL96fromChannels, sortL96intoChannels
+from L96sim.L96_base import f1, f2, pf2
 
+dX_dt = np.empty(K*(J+1), dtype=dtype_np)
 if J > 0:
     def fun(t, x):
         return f2(x, F, h, b, c, dX_dt, K, J)
 else:
     def fun(t, x):
         return f1(x, F, dX_dt, K)
-dX_dt = np.empty(K*(J+1), dtype=dtype_np)
 n_starts = np.array([5000, 10000, 15000])
 i = 0
 for i in range(len(n_starts)):

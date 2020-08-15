@@ -1,7 +1,6 @@
 from .util import sortL96fromChannels, sortL96intoChannels, predictor_corrector, device, dtype
 from .dataset import Dataset, DatasetRelPred, DatasetRelPredPast
 from .networks import named_network
-from L96sim.L96_base import f1, f2
 
 import matplotlib.pyplot as plt
 import numpy as np
