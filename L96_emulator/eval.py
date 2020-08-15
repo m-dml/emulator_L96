@@ -5,6 +5,7 @@ from .networks import named_network
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import time
 
 #device, dtype = init_torch_device(), torch.float32
 
@@ -32,6 +33,77 @@ class Rollout(torch.nn.Module):
             return x
         else:
             raise NotImplementedError
+
+
+def optim_initial_state(
+      model_forwarder, K, J, N,
+      n_steps, lbfgs_pars,
+      x_inits, targets, grndtrths, 
+      out, n_starts, T_rollouts, n_chunks):
+
+    x_sols = np.zeros((n_chunks, N, K*(J+1)))
+    loss_vals = np.zeros(n_steps)
+    time_vals = time.time() * np.ones(n_steps)
+    state_mses = np.zeros(n_chunks)
+    
+    i_ = 0
+    for j in range(n_chunks):
+
+        print('\n')
+        print(f'optimizing over chunk #{j} out of {n_chunks}')
+        print('\n')
+
+        roller_outer = Rollout(model_forwarder, prediction_task='state', K=K, J=J, 
+                               N=N, T=T_rollouts[j], 
+                               x_init=x_inits[j])
+
+        optimizer = torch.optim.LBFGS(params=[roller_outer.X], 
+                                      lr=lbfgs_pars['lr'], 
+                                      max_iter=lbfgs_pars['max_iter'], 
+                                      max_eval=lbfgs_pars['max_eval'], 
+                                      tolerance_grad=lbfgs_pars['tolerance_grad'], 
+                                      tolerance_change=lbfgs_pars['tolerance_change'], 
+                                      history_size=lbfgs_pars['history_size'], 
+                                      line_search_fn='strong_wolfe')
+
+        target = sortL96intoChannels(torch.as_tensor(targets[j], dtype=dtype, device=device),J=J)
+        roller_outer.train()
+        for i in range(n_steps//n_chunks):
+
+            with torch.no_grad():
+                loss = ((roller_outer.forward() - target)**2).mean()        
+                if torch.isnan(loss):
+                    loss_vals[i_] = loss.detach().cpu().numpy()
+                    i_ += 1
+                    continue
+
+            def closure():
+                loss = ((roller_outer.forward() - target)**2).mean()
+                optimizer.zero_grad()
+                loss.backward()
+                return loss            
+            optimizer.step(closure)
+
+            loss_vals[i_] = loss.detach().cpu().numpy()
+            time_vals[i_] = time.time() - time_vals[i_]
+            print((time_vals[i_], loss_vals[i_]))
+
+            i_ += 1
+
+        x_sols[j] = sortL96fromChannels(roller_outer.X.detach().cpu().numpy().copy())
+        if j < n_chunks - 1 and targets[j+1] is None:
+            targets[j+1] = x_sols[j].copy()
+        state_mses[j] = ((x_sols[j] - grndtrths[j])**2).mean()
+
+        with torch.no_grad():
+            print('distance to initial value', ((x_sols[j] - grndtrths[j])**2).mean())
+            print('distance to x_init', ((x_sols[j] - sortL96fromChannels(x_inits[j]))**2).mean())
+            print('distance to target', ((x_sols[j] - targets[j])**2).mean())
+
+        if j < n_chunks - 1 and x_inits[j+1] is None:
+            x_inits[j+1] = roller_outer.X.detach().cpu().numpy().copy()
+
+    return x_sols, loss_vals, time_vals, state_mses
 
 
 def load_model_from_exp_conf(res_dir, conf):
