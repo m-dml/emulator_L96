@@ -150,7 +150,7 @@ loss_vals_LBFGS_full_chunks = np.zeros(n_steps)
 
 
 T_rollouts = np.arange(1, n_chunks+1) * (T_rollout//n_chunks)
-x_inits = x_sols_LBFGS_chunks
+x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_sols_LBFGS_chunks] 
 targets = [out[n_starts+T_rollout].copy() for i in range(n_chunks)]
 
 res = optim_initial_state(
@@ -208,8 +208,8 @@ print('\n')
 print('L-BFGS, solve across full rollout time in one go')
 print('\n')
 
-x_init = sortL96intoChannels(out[n_starts+T_rollout].copy(), J=J)
-x_inits = [x_init for j in range(n_chunks)]
+x_init = sortL96intoChannels(out[n_starts+T_rollout], J=J)
+x_inits = [x_init.copy() for j in range(n_chunks)]
 res = optim_initial_state(
       model_forwarder, K, J, N,
       n_steps, lbfgs_pars,
