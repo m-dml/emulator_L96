@@ -44,14 +44,48 @@ F, h, b, c = 10., 1., 10., 10.
 lead_time = 1
 prediction_task = 'state'
 
-exp_id = 20
-
-exp_names = os.listdir('experiments/')   
-conf_exp = exp_names[np.where(np.array([name[:2] for name in exp_names])==str(exp_id))[0][0]][:-4]
-print('conf_exp', conf_exp)
-
+exp_id = None
 model_forwarder = 'rk4_default'
 dt_net = dt
+
+if exp_id is None: 
+    # loading 'perfect' (up to machine-precision-level quirks) L96 model in pytorch
+    
+    conf_exp = '00_analyticalMinimalConvNet'
+    args = {'filters': [0],
+           'kernel_sizes': [4],
+           'init_net': 'analytical',
+           'K_net': K,
+           'J_net': J,
+           'dt_net': dt_net,
+           'model_forwarder': model_forwarder}
+    model, model_forwarder = named_network(
+        model_name='MinimalConvNetL96',
+        n_input_channels=J+1,
+        n_output_channels=J+1,
+        seq_length=1,
+        **args
+    )
+else:
+
+    exp_names = os.listdir('experiments/')   
+    conf_exp = exp_names[np.where(np.array([name[:2] for name in exp_names])==str(exp_id))[0][0]][:-4]
+    print('conf_exp', conf_exp)
+
+    # ### pick a (trained) emulator
+
+    args = setup(conf_exp=f'experiments/{conf_exp}.yml')
+    args.pop('conf_exp')
+
+    # ### choose numerical solver scheme
+
+    args['model_forwarder'] = model_forwarder
+    args['dt_net'] = dt_net
+
+    # ### load & instantiate the emulator
+
+    model, model_forwarder, _ = load_model_from_exp_conf(res_dir, args)
+
 
 n_starts = np.arange(int(spin_up_time/dt), int(train_frac*T/dt), 2* int(spin_up_time/dt))
 T_rollout, N = 40, len(n_starts)
@@ -84,21 +118,11 @@ dg_train = DatasetClass(data=out, J=J, offset=lead_time, normalize=normalize_dat
                    end=int(np.floor(out.shape[0]*train_frac)))
 
 
-# ### pick a (trained) emulator
-
-args = setup(conf_exp=f'experiments/{conf_exp}.yml')
-args.pop('conf_exp')
-
-# ### choose numerical solver scheme
-
-args['model_forwarder'] = model_forwarder
-args['dt_net'] = dt_net
-
-# ### load & instantiate the emulator
-
-model, model_forwarder, training_outputs = load_model_from_exp_conf(res_dir, args)
-
 # ## L-BFGS, split rollout time into chunks, solve sequentially from end to beginning
+
+print('\n')
+print('L-BFGS, split rollout time into chunks, solve sequentially from end to beginning')
+print('\n')
 
 loss_vals_LBFGS_chunks = np.zeros(n_steps)
 time_vals_LBFGS_chunks = time.time() * np.ones(n_steps)
@@ -137,6 +161,7 @@ for j in range(n_chunks):
         loss = ((roller_outer_LBFGS_chunks.forward() - target)**2).mean()
         
         if torch.isnan(loss):
+            loss_vals_LBFGS_chunks[i_] = loss.detach().cpu().numpy()
             i_ += 1
             continue
 
@@ -165,58 +190,11 @@ for j in range(n_chunks):
     state_mses_LBFGS_chunks[j] = ((x_sols_LBFGS_chunks[j] - grndtrth)**2).mean()
 
 
-# ## L-BFGS, solve across full rollout time in one go
-# - warning, this can be excruciatingly slow and hard to converge !
-
-loss_vals_LBFGS_full_persistence = np.zeros(n_steps)
-time_vals_LBFGS_full_persistence = time.time() * np.ones(n_steps)
-
-x_sols_LBFGS_full_persistence = np.zeros((n_chunks, N, K*(J+1)))
-state_mses_LBFGS_full_persistence = np.zeros(n_chunks)
-
-x_init = sortL96intoChannels(out[n_starts+T_rollout].copy(), J=J)
-target = sortL96intoChannels(torch.as_tensor(out[n_starts+T_rollout], dtype=dtype, device=device), J=J)
-
-i_ = 0
-for j in range(n_chunks):
-
-    roller_outer_LBFGS_full_persistence = Rollout(model_forwarder, prediction_task='state', K=K, J=J, 
-                                        N=N, T=(j+1)*T_rollout//n_chunks, x_init=x_init)
-    optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_full_persistence.parameters(),
-                                  lr=lbfgs_pars['lr'], 
-                                  max_iter=lbfgs_pars['max_iter'], 
-                                  max_eval=lbfgs_pars['max_eval'], 
-                                  tolerance_grad=lbfgs_pars['tolerance_grad'], 
-                                  tolerance_change=lbfgs_pars['tolerance_change'], 
-                                  history_size=lbfgs_pars['history_size'], 
-                                  line_search_fn=lbfgs_pars['line_search_fn'])
-
-    roller_outer_LBFGS_full_persistence.train()
-    for i in range(n_steps//n_chunks):
-
-        loss = ((roller_outer_LBFGS_full_persistence.forward() - target)**2).mean()
-        
-        if torch.isnan(loss):
-            i_ += 1
-            continue
-
-        def closure():
-            loss = ((roller_outer_LBFGS_full_persistence.forward() - target)**2).mean()
-            optimizer.zero_grad()
-            loss.backward()
-            return loss            
-        optimizer.step(closure)        
-        loss_vals_LBFGS_full_persistence[i_] = loss.detach().cpu().numpy()
-        time_vals_LBFGS_full_persistence[i_] = time.time() - time_vals_LBFGS_full_persistence[i_]
-        print((time_vals_LBFGS_full_persistence[i_], loss_vals_LBFGS_full_persistence[i_]))
-        i_ += 1
-
-    x_sols_LBFGS_full_persistence[j] = sortL96fromChannels(roller_outer_LBFGS_full_persistence.X.detach().cpu().numpy().copy())
-    grndtrth = out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)]
-    state_mses_LBFGS_full_persistence[j] = ((x_sols_LBFGS_full_persistence[j] - grndtrth)**2).mean()
-
-
 # ## L-BFGS, solve across full rollout time in one go, initialize from chunked approach
+
+print('\n')
+print('L-BFGS, solve across full rollout time in one go, initialize from chunked approach')
+print('\n')
 
 loss_vals_LBFGS_full_chunks = np.zeros(n_steps)
 time_vals_LBFGS_full_chunks = time.time() * np.ones(n_steps)
@@ -247,6 +225,7 @@ for j in range(n_chunks):
         loss = ((roller_outer_LBFGS_full_chunks.forward() - target)**2).mean()
         
         if torch.isnan(loss):
+            loss_vals_LBFGS_full_chunks[i_] = loss.detach().cpu().numpy()
             i_ += 1
             continue
 
@@ -267,6 +246,10 @@ for j in range(n_chunks):
 
 
 # ## L-BFGS, solve across full rollout time in one go, initiate from backward solution
+
+print('\n')
+print('L-BFGS, solve across full rollout time in one go, initiate from backward solution')
+print('\n')
 
 dX_dt = np.empty(K*(J+1), dtype=dtype_np)
 if J > 0:
@@ -321,6 +304,7 @@ for j in range(n_chunks):
         loss = ((roller_outer_LBFGS_full_backsolve.forward() - target)**2).mean()
         
         if torch.isnan(loss):
+            loss_vals_LBFGS_full_backsolve[i_] = loss.detach().cpu().numpy()
             i_ += 1
             continue
 
@@ -339,7 +323,68 @@ for j in range(n_chunks):
     grndtrth = out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)]
     state_mses_LBFGS_full_backsolve[j] = ((x_sols_LBFGS_full_backsolve[j] - grndtrth)**2).mean()
 
+
+# ## L-BFGS, solve across full rollout time in one go
+# - warning, this can be excruciatingly slow and hard to converge !
+
+print('\n')
+print('L-BFGS, solve across full rollout time in one go')
+print('\n')
+
+loss_vals_LBFGS_full_persistence = np.zeros(n_steps)
+time_vals_LBFGS_full_persistence = time.time() * np.ones(n_steps)
+
+x_sols_LBFGS_full_persistence = np.zeros((n_chunks, N, K*(J+1)))
+state_mses_LBFGS_full_persistence = np.zeros(n_chunks)
+
+x_init = sortL96intoChannels(out[n_starts+T_rollout].copy(), J=J)
+target = sortL96intoChannels(torch.as_tensor(out[n_starts+T_rollout], dtype=dtype, device=device), J=J)
+
+i_ = 0
+for j in range(n_chunks):
+
+    roller_outer_LBFGS_full_persistence = Rollout(model_forwarder, prediction_task='state', K=K, J=J, 
+                                        N=N, T=(j+1)*T_rollout//n_chunks, x_init=x_init)
+    optimizer = torch.optim.LBFGS(params=roller_outer_LBFGS_full_persistence.parameters(),
+                                  lr=lbfgs_pars['lr'], 
+                                  max_iter=lbfgs_pars['max_iter'], 
+                                  max_eval=lbfgs_pars['max_eval'], 
+                                  tolerance_grad=lbfgs_pars['tolerance_grad'], 
+                                  tolerance_change=lbfgs_pars['tolerance_change'], 
+                                  history_size=lbfgs_pars['history_size'], 
+                                  line_search_fn=lbfgs_pars['line_search_fn'])
+
+    roller_outer_LBFGS_full_persistence.train()
+    for i in range(n_steps//n_chunks):
+
+        loss = ((roller_outer_LBFGS_full_persistence.forward() - target)**2).mean()
+        
+        if torch.isnan(loss):
+            loss_vals_LBFGS_full_persistence[i_] = loss.detach().cpu().numpy()
+            i_ += 1
+            continue
+
+        def closure():
+            loss = ((roller_outer_LBFGS_full_persistence.forward() - target)**2).mean()
+            optimizer.zero_grad()
+            loss.backward()
+            return loss            
+        optimizer.step(closure)        
+        loss_vals_LBFGS_full_persistence[i_] = loss.detach().cpu().numpy()
+        time_vals_LBFGS_full_persistence[i_] = time.time() - time_vals_LBFGS_full_persistence[i_]
+        print((time_vals_LBFGS_full_persistence[i_], loss_vals_LBFGS_full_persistence[i_]))
+        i_ += 1
+
+    x_sols_LBFGS_full_persistence[j] = sortL96fromChannels(roller_outer_LBFGS_full_persistence.X.detach().cpu().numpy().copy())
+    grndtrth = out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)]
+    state_mses_LBFGS_full_persistence[j] = ((x_sols_LBFGS_full_persistence[j] - grndtrth)**2).mean()
+
+
 # ## plot and compare results
+
+print('\n')
+print('done, storing results')
+print('\n')
 
 initial_states = [out[n_starts+j*T_rollout//n_chunks] for j in range(n_chunks)]
 initial_states = np.stack([sortL96intoChannels(z,J=J) for z in initial_states])
