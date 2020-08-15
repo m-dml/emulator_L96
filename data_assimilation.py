@@ -151,9 +151,7 @@ loss_vals_LBFGS_full_chunks = np.zeros(n_steps)
 
 T_rollouts = np.arange(1, n_chunks+1) * (T_rollout//n_chunks)
 x_inits = x_sols_LBFGS_chunks
-target = sortL96intoChannels(torch.as_tensor(out[n_starts+T_rollout],
-                                             dtype=dtype, device=device), J=J)
-targets = [target.copy() for i in range(n_chunks)]
+targets = [out[n_starts+T_rollout].copy() for i in range(n_chunks)]
 
 res = optim_initial_state(
       model_forwarder, K, J, N,
@@ -193,7 +191,7 @@ for j in range(n_chunks):
     time_vals_backsolve[j] = time.time() - time_vals_backsolve[j]
     state_mses_backsolve[j] = ((x_init - out[n_starts])**2).mean()
 
-x_inits = x_sols_backsolve
+x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_sols_backsolve]
 res = optim_initial_state(
       model_forwarder, K, J, N,
       n_steps, lbfgs_pars,
