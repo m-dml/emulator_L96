@@ -677,10 +677,10 @@ class MinimalConvNetL96(torch.nn.Module):
     def __init__(self, K, J=0, F=10., b=10., c=10., h=1., init='rand'):
         
         super(MinimalConvNetL96, self).__init__()
-        
+            
         self.layer1 = setup_conv(in_channels = J+1, 
                                  out_channels = 3*(J+1), 
-                                 kernel_size = 4 if J>1 else 5, 
+                                 kernel_size = 5 if J == 1 else 4, 
                                  bias = True, 
                                  padding_mode='circular', 
                                  stride=1)
