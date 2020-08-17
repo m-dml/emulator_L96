@@ -44,7 +44,7 @@ F, h, b, c = 10., 1., 10., 10.
 lead_time = 1
 prediction_task = 'state'
 
-exp_id = 20
+exp_id = None
 model_forwarder = 'rk4_default'
 dt_net = dt
 
@@ -177,6 +177,8 @@ else:
         return - f1(x, F, dX_dt, K)
 state_mses_backsolve = np.zeros(n_chunks)
 time_vals_backsolve = np.zeros(n_chunks)
+
+x_sols_backsolve = np.zeros((n_chunks, len(n_starts), K*(J+1)))
 i_ = 0
 for j in range(n_chunks):
     
@@ -184,6 +186,7 @@ for j in range(n_chunks):
     times = dt * np.linspace(0, T_i, back_solve_dt_fac * T_i+1) # note the increase in temporal resolution!
     print('backward solving')
     time_vals_backsolve[j] = time.time()
+    x_init = np.zeros((len(n_starts), K*(J+1)))
     for i__ in range(len(n_starts)):
         out2 = rk4_default(fun=fun, y0=out[n_starts[i__]+T_rollout].copy(), times=times)
         x_init[i__] = out2[-1].copy()
@@ -216,7 +219,7 @@ res = optim_initial_state(
       x_inits, targets, grndtrths,
       out, n_starts, T_rollouts, n_chunks)
 
-x_sols_LBFGS_full_persistence, loss_vals_LBFGS_full_persistence, time_vals_full_persistence, state_mses_full_persistence = res
+x_sols_LBFGS_full_persistence, loss_vals_LBFGS_full_persistence, time_vals_LBFGS_full_persistence, state_mses_full_persistence = res
 
 
 # ## plot and compare results
@@ -264,7 +267,7 @@ np.save(res_dir + f'results/data_assimilation/fullyobs_initstate_tests_exp{exp_i
             'loss_vals_LBFGS_full_persistence' : loss_vals_LBFGS_full_persistence,
             'loss_vals_LBFGS_full_chunks' : loss_vals_LBFGS_full_chunks,
             'loss_vals_LBFGS_chunks' : loss_vals_LBFGS_chunks,
-            'loss_vals_LBFGS_chunks_rollout' : loss_vals_LBFGS_chunks_rollout,
+            #'loss_vals_LBFGS_chunks_rollout' : loss_vals_LBFGS_chunks_rollout,
 
             'time_vals_LBFGS_full_backsolve' :   time_vals_LBFGS_full_backsolve,
             'time_vals_LBFGS_full_persistence' : time_vals_LBFGS_full_persistence,
