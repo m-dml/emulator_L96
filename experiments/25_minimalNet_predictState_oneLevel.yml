@@ -1,4 +1,4 @@
-exp_id: minimalNet_predictState_J_initRand_RK_multiTrial_thorough
+exp_id: minimalNet_predictState_J_initRand_RK_multiTrial_analytical
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
 K: 36
