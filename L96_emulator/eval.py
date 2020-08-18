@@ -35,6 +35,28 @@ class Rollout(torch.nn.Module):
             raise NotImplementedError
 
 
+class ObsOp_subsampleGaussian(torch.nn.Module):
+    def __init__(self, r=0., sigma2=0.):
+        super(ObsOp_subsampleGaussian, self).__init__()
+        
+        assert sigma2 >= 0.
+        self.sigma2 = torch.as_tensor(sigma2, dtype=dtype, device=device)
+        self.sigma = torch.sqrt(self.sigma2)
+        self.ndistr = torch.distributions.normal.Normal(loc=0., scale=self.sigma)
+
+        assert 0. <= r <=1.
+        self.r = torch.as_tensor(r, dtype=dtype, device=device)
+        self.mdistr = torch.distributions.Bernoulli(probs=1-self.r)
+        self.mask = 1.
+
+    def sample_mask(self, sample_shape):
+        self.mask = self.mdistr.sample(sample_shape=sample_shape)
+
+    def forward(self, x):
+        self.sample_mask(sample_shape=x.shape)
+        return self.mask * (x + self.sigma * self.ndistr.sample(sample_shape=x.shape))
+
+
 def optim_initial_state(
       model_forwarder, K, J, N,
       n_steps, optimizer_pars,
@@ -43,8 +65,8 @@ def optim_initial_state(
       f_init=None):
 
     x_sols = np.zeros((n_chunks, N, K*(J+1)))
-    loss_vals = np.zeros(n_steps)
-    time_vals = time.time() * np.ones(n_steps)
+    loss_vals = np.zeros((n_steps,N))
+    time_vals = time.time() * np.ones((n_steps,N))
     state_mses = np.zeros(n_chunks)
     
     i_ = 0
@@ -81,7 +103,7 @@ def optim_initial_state(
                     with torch.no_grad():
                         loss = ((roller_outer.forward() - target[n])**2).mean()        
                         if torch.isnan(loss):
-                            loss_vals[i_] = loss.detach().cpu().numpy()
+                            loss_vals[i_n,n] = loss.detach().cpu().numpy()
                             i_ += 1
                             continue
 
@@ -91,10 +113,9 @@ def optim_initial_state(
                         loss.backward()
                         return loss            
                     optimizer.step(closure)
-                    loss_vals[i_+i_n] += loss.detach().cpu().numpy() / N
-                    if n == N-1:
-                        time_vals[i_+i_n] = time.time() - time_vals[i_+i_n]
-                    print((time_vals[i_+i_n], loss_vals[i_+i_n]))
+                    loss_vals[i_n,n] = loss.detach().cpu().numpy()
+                    time_vals[i_n,n] = time.time() - time_vals[i_n,n]
+                    print((time_vals[i_n,n], loss_vals[i_n,n]))
                     i_n += 1
 
                 x_sols[j][n] = sortL96fromChannels(roller_outer.X.detach().cpu().numpy().copy())
