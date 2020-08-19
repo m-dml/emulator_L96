@@ -7,7 +7,6 @@ import numpy as np
 import torch
 import time
 
-#device, dtype = init_torch_device(), torch.float32
 
 class Rollout(torch.nn.Module):
 

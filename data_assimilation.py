@@ -18,16 +18,16 @@
 import numpy as np
 
 from L96_emulator.util import dtype, dtype_np, device
-from L96_emulator.data_assimilation import solve_initstate, ObsOp_subsampleGaussian
+from L96_emulator.data_assimilation import solve_initstate, ObsOp_subsampleGaussian, ObsOp_identity
 
 res_dir = '/gpfs/work/nonnenma/results/emulators/L96/'
 data_dir = '/gpfs/work/nonnenma/data/emulators/L96/'
 
 system_pars = {
     'K' : 36,
-    'J' : 10,
+    'J' : 0,
     'T' : 605,
-    'dt' : 0.01,
+    'dt' : 0.05,
     'N_trials' : 1,
     'spin_up_time' : 5.,
     'train_frac' : 0.8,
@@ -36,8 +36,8 @@ system_pars = {
     'h' : 1.,
     'b' : 10.,
     'c' : 10.,
-    'obs_operator' : ObsOp_subsampleGaussian,
-    'obs_operator_args' : {'r' : 0.5, 'sigma2' : 1.0}
+    'obs_operator' : ObsOp_identity, #ObsOp_identity, #ObsOp_subsampleGaussian,
+    'obs_operator_args' : {} #{'r' : 0.0, 'sigma2' : 1.0} #{} #{'r' : 0.5, 'sigma2' : 1.0}
 }
 
 setup_pars = {
@@ -53,7 +53,7 @@ setup_pars = {
 setup_pars['N'] = len(setup_pars['n_starts'])
 
 model_pars = {
-    'exp_id' : 23,
+    'exp_id' : 24,
     'model_forwarder' : 'rk4_default',
     'dt_net' : system_pars['dt']
 }
@@ -67,7 +67,7 @@ optimizer_pars = {
               'tolerance_grad' : 1e-07,
               'tolerance_change' : 1e-09,
               'history_size': 10,
-              'back_solve_dt_fac' : 100
+              'back_solve_dt_fac' : 1000
 }
 
 solve_initstate(system_pars=system_pars,
