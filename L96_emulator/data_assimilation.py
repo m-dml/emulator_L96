@@ -47,7 +47,7 @@ def mse_loss_fullyObs(x, t):
 def mse_loss_masked(x, t, m):
 
     assert x.shape == m.shape and t.shape == m.shape
-    return ((x[m>0] - t[m>0])**2).mean()
+    return (m * ((x - t)**2)).sum() / m.sum()
 
 
 def optim_initial_state(
