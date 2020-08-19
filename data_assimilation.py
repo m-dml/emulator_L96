@@ -18,7 +18,7 @@
 import numpy as np
 
 from L96_emulator.util import dtype, dtype_np, device
-from L96_emulator.data_assimilation import solve_initstate_fullyObs
+from L96_emulator.data_assimilation import solve_initstate, ObsOp_subsampleGaussian
 
 res_dir = '/gpfs/work/nonnenma/results/emulators/L96/'
 data_dir = '/gpfs/work/nonnenma/data/emulators/L96/'
@@ -35,13 +35,15 @@ system_pars = {
     'F' : 10.,
     'h' : 1.,
     'b' : 10.,
-    'c' : 10.
+    'c' : 10.,
+    'obs_operator' : ObsOp_subsampleGaussian,
+    'obs_operator_args' : {'r' : 0.5, 'sigma2' : 1.0}
 }
 
 setup_pars = {
     'n_starts' : np.arange(int(system_pars['spin_up_time']/system_pars['dt']),
                            int(system_pars['train_frac']*system_pars['T']/system_pars['dt']),
-                           2* int(system_pars['spin_up_time']/system_pars['dt'])),
+                           8* int(system_pars['spin_up_time']/system_pars['dt'])),
     'T_rollout' : 40,
     'n_chunks' : 40,
     'n_steps' : 1000, # total number of gradient steps (across all chunks !)
@@ -68,9 +70,9 @@ optimizer_pars = {
               'back_solve_dt_fac' : 100
 }
 
-solve_initstate_fullyObs(system_pars=system_pars,
-                         model_pars=model_pars,
-                         optimizer_pars=optimizer_pars,
-                         setup_pars=setup_pars,
-                         res_dir=res_dir,
-                         data_dir=data_dir)
+solve_initstate(system_pars=system_pars,
+                model_pars=model_pars,
+                optimizer_pars=optimizer_pars,
+                setup_pars=setup_pars,
+                res_dir=res_dir,
+                data_dir=data_dir)

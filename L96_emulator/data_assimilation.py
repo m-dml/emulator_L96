@@ -10,32 +10,52 @@ from L96_emulator.util import predictor_corrector, rk4_default, get_data
 
 from L96_emulator.run import setup, sel_dataset_class
 
-from L96_emulator.eval import load_model_from_exp_conf, get_rollout_fun, named_network
+from L96_emulator.eval import load_model_from_exp_conf, get_rollout_fun, named_network, Rollout
 
 import L96sim
 from L96sim.L96_base import f1, f2, pf2
 
+def as_tensor(x):
+    return torch.as_tensor(x, dtype=dtype, device=device)
 
 class ObsOp_subsampleGaussian(torch.nn.Module):
     def __init__(self, r=0., sigma2=0.):
         super(ObsOp_subsampleGaussian, self).__init__()
-
         assert sigma2 >= 0.
-        self.sigma2 = torch.as_tensor(sigma2, dtype=dtype, device=device)
+        self.sigma2 = as_tensor(sigma2)
         self.sigma = torch.sqrt(self.sigma2)
         self.ndistr = torch.distributions.normal.Normal(loc=0., scale=self.sigma)
 
         assert 0. <= r <=1.
-        self.r = torch.as_tensor(r, dtype=dtype, device=device)
+        self.r = as_tensor(r)
         self.mdistr = torch.distributions.Bernoulli(probs=1-self.r)
         self.mask = 1.
 
     def sample_mask(self, sample_shape):
         self.mask = self.mdistr.sample(sample_shape=sample_shape)
 
-    def forward(self, x):
+    def forward(self, x): # deterministic part of observation operator
+        return x
+
+    def forward_and_draw(self, x): # observation operator (incl. stochastic parts)
         self.sample_mask(sample_shape=x.shape)
         return self.mask * (x + self.sigma * self.ndistr.sample(sample_shape=x.shape))
+
+
+class ObsOp_identity(torch.nn.Module):
+    def __init__(self):
+        super(ObsOp_identity, self).__init__()
+
+    def sample_mask(self, sample_shape):
+        self.mask = torch.ones(size=sample_shape, dtype=torch.int)
+
+    def forward(self, x): # deterministic part of observation operator
+        self.sample_mask(sample_shape=x.shape)
+        return x
+
+    def forward_and_draw(self, x): # observation operator (incl. stochastic parts)
+        self.sample_mask(sample_shape=x.shape)
+        return x
 
 
 def mse_loss_fullyObs(x, t):
@@ -49,34 +69,54 @@ def mse_loss_masked(x, t, m):
     assert x.shape == m.shape and t.shape == m.shape
     return (m * ((x - t)**2)).sum() / m.sum()
 
+def mse_loss_masked2(x, t, m):
+
+    assert x.shape == m.shape and t.shape == m.shape
+    return ((x[m>0] - t[m>0])**2).mean()
 
 def optim_initial_state(
       model_forwarder, K, J, N,
       n_steps, optimizer_pars,
       x_inits, targets, grndtrths,
       out, n_starts, T_rollouts, n_chunks,
-      f_init=None, loss_fun=mse_loss_fullyObs):
+      f_init=None, f_obs=torch.nn.Identity(), loss_masks=None):
 
     x_sols = np.zeros((n_chunks, N, K*(J+1)))
     loss_vals = np.zeros((n_steps,N))
     time_vals = time.time() * np.ones((n_steps,N))
     state_mses = np.zeros(n_chunks)
+    
+    loss_masks = [None for i in range(n_chunks)] if loss_masks is None else loss_masks
+    assert len(loss_masks) == n_chunks
 
     i_ = 0
     for j in range(n_chunks):
 
         print('\n')
-        print(f'optimizing over chunk #{j} out of {n_chunks}')
+        print(f'optimizing over chunk #{j+1} out of {n_chunks}')
         print('\n')
 
-        target = sortL96intoChannels(torch.as_tensor(targets[j], dtype=dtype, device=device),J=J)
+        target = sortL96intoChannels(as_tensor(targets[j]),J=J)
+
+        if loss_masks[j] is None: 
+            loss_fun = mse_loss_fullyObs
+        else:
+            loss_fun = mse_loss_masked
 
         if optimizer_pars['optimizer'] == 'LBFGS':
+
+            if loss_masks[j] is None:
+                def get_loss_extra_args(n):
+                    return {}
+            else:
+                assert loss_masks[j].shape == (N, J+1, K)
+                def get_loss_extra_args(n):
+                    return {'m' : loss_masks[j][n:n+1]}
 
             for n in range(N):
 
                 print('\n')
-                print(f'optimizing over initial state #{n} / {N}')
+                print(f'optimizing over initial state #{n+1} / {N}')
                 print('\n')
 
                 roller_outer = Rollout(model_forwarder, prediction_task='state', K=K, J=J,
@@ -90,18 +130,20 @@ def optim_initial_state(
                                               tolerance_change=optimizer_pars['tolerance_change'],
                                               history_size=optimizer_pars['history_size'],
                                               line_search_fn='strong_wolfe')
+                loss_args = get_loss_extra_args(n)
+
                 i_n = 0
                 for i in range(n_steps//n_chunks):
 
                     with torch.no_grad():
-                        loss = loss_fun(roller_outer.forward(), target[n])
+                        loss = loss_fun(f_obs(roller_outer.forward()), target[n:n+1], **loss_args)
                         if torch.isnan(loss):
                             loss_vals[i_n,n] = loss.detach().cpu().numpy()
                             i_ += 1
                             continue
 
                     def closure():
-                        loss = loss_fun(roller_outer.forward(), target[n])
+                        loss = loss_fun(f_obs(roller_outer.forward()), target[n:n+1], **loss_args)
                         optimizer.zero_grad()
                         loss.backward()
                         return loss
@@ -121,17 +163,22 @@ def optim_initial_state(
             roller_outer.train()
             optimizer = torch.optim.SGD([roller_outer.X], lr=optimizer_pars['lr'], weight_decay=0.)
 
+            if loss_masks[j] is None:
+                 loss_args = {}
+            else:
+                 loss_args[j] = {'m' : loss_masks[j]}
+
             for i in range(n_steps//n_chunks):
 
                 with torch.no_grad():
-                    loss = loss_fun(roller_outer.forward(), target)
+                    loss = loss_fun(f_obs(roller_outer.forward()), target, **loss_args)
                     if torch.isnan(loss):
                         loss_vals[i_] = loss.detach().cpu().numpy()
                         i_ += 1
                         continue
 
                 optimizer.zero_grad()
-                loss = loss_fun(roller_outer.forward(), target)
+                loss = loss_fun(f_obs(roller_outer.forward()), target, **loss_args)
                 loss.backward()
                 optimizer.step()
 
@@ -147,10 +194,15 @@ def optim_initial_state(
             targets[j+1] = x_sols[j].copy()
         state_mses[j] = ((x_sols[j] - grndtrths[j])**2).mean()
 
-        with torch.no_grad():
-            print('distance to initial value', ((x_sols[j] - grndtrths[j])**2).mean())
-            print('distance to x_init', ((x_sols[j] - sortL96fromChannels(x_inits[j]))**2).mean())
-            print('distance to target', ((x_sols[j] - targets[j])**2).mean())
+        with torch.no_grad():  
+            print('distance to initial value', mse_loss_fullyObs(x_sols[j], grndtrths[j]))
+            print('distance to x_init', mse_loss_fullyObs(x_sols[j], sortL96fromChannels(x_inits[j])))
+            if loss_masks[j] is None:
+                print('distance to target', mse_loss_fullyObs(x_sols[j], targets[j]))
+            else:
+                print('distance to target', mse_loss_masked(x_sols[j], 
+                                                            targets[j],
+                                                            sortL96fromChannels(loss_masks[j]).detach().cpu().numpy()))
 
         if j < n_chunks - 1 and x_inits[j+1] is None:
             x_inits[j+1] = sortL96intoChannels(x_sols[j], J=J).copy()
@@ -160,11 +212,12 @@ def optim_initial_state(
     return x_sols, loss_vals, time_vals, state_mses
 
 
-def solve_initstate_fullyObs(system_pars, model_pars, optimizer_pars, setup_pars, res_dir, data_dir):
+def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir, data_dir):
 
     K,J,T,dt,N_trials=system_pars['K'],system_pars['J'],system_pars['T'],system_pars['dt'],system_pars['N_trials']
     spin_up_time,train_frac,normalize_data=system_pars['spin_up_time'],system_pars['train_frac'],system_pars['normalize_data']
     F,h,b,c=system_pars['F'],system_pars['h'],system_pars['b'],system_pars['c']
+    obs_operator, obs_operator_args=system_pars['obs_operator'], system_pars['obs_operator_args'] 
     
     n_starts, T_rollout, n_chunks, N = setup_pars['n_starts'], setup_pars['T_rollout'], setup_pars['n_chunks'], setup_pars['N']
     n_steps, prediction_task, lead_time = setup_pars['n_steps'], setup_pars['prediction_task'], setup_pars['lead_time']
@@ -242,7 +295,14 @@ def solve_initstate_fullyObs(system_pars, model_pars, optimizer_pars, setup_pars
                        start=int(spin_up_time/dt), 
                        end=int(np.floor(out.shape[0]*train_frac)))
 
+    # ### instantiate observation operator
 
+    obs = obs_operator(**obs_operator_args)
+    
+    target_obs = obs.forward_and_draw(sortL96intoChannels(as_tensor(out[n_starts+T_rollout]),J=J))
+    target_obs = sortL96fromChannels(target_obs.detach().cpu().numpy())
+
+    
     # ## L-BFGS, solve across full rollout time recursively, initialize from  explicit backward solution
 
     print('\n')
@@ -257,45 +317,48 @@ def solve_initstate_fullyObs(system_pars, model_pars, optimizer_pars, setup_pars
     def explicit_backsolve(x_init):
         x_init = sortL96fromChannels(x_init)
         x_sols = np.zeros_like(x_init)
-        #x_init = torch.as_tensor(x_init, dtype=dtype, device=device)
-        print('x_init.shape', x_init.shape)
-        print('x_init', x_init)
         for i__ in range(x_init.shape[0]):
             out2 = rk4_default(fun=fun_eb, y0=x_init[i__], times=times_eb)
             x_sols[i__] = out2[-1].copy()#.detach().cpu().numpy().copy()
         return sortL96intoChannels(x_sols,J=J)
+    x_inits[0] = explicit_backsolve(sortL96intoChannels(target_obs,J=J))
 
-    x_inits[0] = explicit_backsolve(sortL96intoChannels(out[n_starts+T_rollout],J=J)).copy()
-    targets = [out[n_starts+T_rollout].copy() for i in range(n_chunks)]
+    targets, loss_masks = [1.*target_obs for i in range(n_chunks)], [1.*obs.mask for i in range(n_chunks)]
 
     res = optim_initial_state(
           model_forwarder, K, J, N,
           n_steps, optimizer_pars,
           x_inits, targets, grndtrths,
           out, n_starts, T_rollouts, n_chunks,
-          f_init=explicit_backsolve)
+          f_init=explicit_backsolve, 
+          loss_masks=loss_masks, f_obs=obs.forward)
 
-    x_sols_LBFGS_recurse_chunks, loss_vals_LBFGS_recurse_chunks, time_vals_LBFGS_recurse_chunks, state_mses_LBFGS_recurse_chunks = res
+    x_sols_LBFGS_recurse_chunks, loss_vals_LBFGS_recurse_chunks = res[0], res[1]
+    time_vals_LBFGS_recurse_chunks, state_mses_LBFGS_recurse_chunks = res[2], res[3]
 
-
-    # ## L-BFGS, split rollout time into chunks, solve sequentially from end to beginning
+    # ## L-BFGS, solve across single chunks recursively, initialize from last chunk
 
     print('\n')
-    print('L-BFGS, split rollout time into chunks, solve sequentially from end to beginning')
+    print('L-BFGS, solve across single chunks recursively, initialize from last chunk')
     print('\n')
 
     T_rollouts = np.ones(n_chunks, dtype=np.int) * (T_rollout//n_chunks)
     x_inits, targets = [None for i in range(n_chunks)], [None for i in range(n_chunks)]
     x_inits[0] = sortL96intoChannels(np.atleast_2d(out[n_starts+T_rollout].copy()),J=J)
-    targets[0] = out[n_starts+T_rollout].copy()
-
+    targets[0] = 1.*target_obs
+    loss_masks = [None for i in range(n_chunks)]
+    loss_masks[0] = 1.*obs.mask
+    
     res = optim_initial_state(
           model_forwarder, K, J, N,
           n_steps, optimizer_pars,
           x_inits, targets, grndtrths,
-          out, n_starts, T_rollouts, n_chunks)
+          out, n_starts, T_rollouts, n_chunks,
+          loss_masks=loss_masks, f_obs=obs.forward)
 
-    x_sols_LBFGS_chunks, loss_vals_LBFGS_chunks, time_vals_LBFGS_chunks, state_mses_LBFGS_chunks = res
+    x_sols_LBFGS_chunks, loss_vals_LBFGS_chunks = res[0], res[1]
+    time_vals_LBFGS_chunks, state_mses_LBFGS_chunks = res[2], res[3]
+
 
     # ## L-BFGS, solve across full rollout time in one go, initialize from chunked approach
 
@@ -305,15 +368,17 @@ def solve_initstate_fullyObs(system_pars, model_pars, optimizer_pars, setup_pars
 
     T_rollouts = np.arange(1, n_chunks+1) * (T_rollout//n_chunks)
     x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_sols_LBFGS_chunks] 
-    targets = [out[n_starts+T_rollout].copy() for i in range(n_chunks)]
+    targets, loss_masks = [1.*target_obs for i in range(n_chunks)], [1.*obs.mask for i in range(n_chunks)]
 
     res = optim_initial_state(
           model_forwarder, K, J, N,
           n_steps, optimizer_pars,
           x_inits, targets, grndtrths,
-          out, n_starts, T_rollouts, n_chunks)
+          out, n_starts, T_rollouts, n_chunks,
+          loss_masks=loss_masks, f_obs=obs.forward)
 
-    x_sols_LBFGS_full_chunks, loss_vals_LBFGS_full_chunks, time_vals_LBFGS_full_chunks, state_mses_LBFGS_full_chunks = res
+    x_sols_LBFGS_full_chunks, loss_vals_LBFGS_full_chunks  = res[0], res[1]
+    time_vals_LBFGS_full_chunks, state_mses_LBFGS_full_chunks = res[2], res[3]
 
 
     # ## L-BFGS, solve across full rollout time in one go, initiate from backward solution
@@ -346,9 +411,11 @@ def solve_initstate_fullyObs(system_pars, model_pars, optimizer_pars, setup_pars
           model_forwarder, K, J, N,
           n_steps, optimizer_pars,
           x_inits, targets, grndtrths,
-          out, n_starts, T_rollouts, n_chunks)
+          out, n_starts, T_rollouts, n_chunks,
+          loss_masks=loss_masks, f_obs=obs.forward)
 
-    x_sols_LBFGS_full_backsolve, loss_vals_LBFGS_full_backsolve, time_vals_LBFGS_full_backsolve, state_mses_LBFGS_full_backsolve = res
+    x_sols_LBFGS_full_backsolve, loss_vals_LBFGS_full_backsolve = res[0], res[1]
+    time_vals_LBFGS_full_backsolve, state_mses_LBFGS_full_backsolve = res[2], res[3]
 
 
     # ## L-BFGS, solve across full rollout time in one go
@@ -364,9 +431,11 @@ def solve_initstate_fullyObs(system_pars, model_pars, optimizer_pars, setup_pars
           model_forwarder, K, J, N,
           n_steps, optimizer_pars,
           x_inits, targets, grndtrths,
-          out, n_starts, T_rollouts, n_chunks)
+          out, n_starts, T_rollouts, n_chunks,
+          loss_masks=loss_masks, f_obs=obs.forward)
 
-    x_sols_LBFGS_full_persistence, loss_vals_LBFGS_full_persistence, time_vals_LBFGS_full_persistence, state_mses_LBFGS_full_persistence = res
+    x_sols_LBFGS_full_persistence, loss_vals_LBFGS_full_persistence = res[0], res[1]
+    time_vals_LBFGS_full_persistence, state_mses_LBFGS_full_persistence = res[2], res[3]
 
 
     # ## plot and compare results
@@ -380,7 +449,10 @@ def solve_initstate_fullyObs(system_pars, model_pars, optimizer_pars, setup_pars
 
     model_forwarder_str = args['model_forwarder']
     optimizer_str = optimizer_pars['optimizer']
-    np.save(res_dir + f'results/data_assimilation/fullyobs_initstate_tests_exp{exp_id}_{model_forwarder_str}_{optimizer_str}',
+    obs_operator_str = obs.__class__.__name__
+    fn = 'results/data_assimilation/fullyobs_initstate_tests_'
+    fn = fn + f'exp{exp_id}_{model_forwarder_str}_{optimizer_str}_{obs_operator_str}'
+    np.save(res_dir + fn,
             arr={
                 'K' : K,
                 'J' : J,
@@ -410,6 +482,9 @@ def solve_initstate_fullyObs(system_pars, model_pars, optimizer_pars, setup_pars
 
                 'targets' : sortL96intoChannels(out[n_starts+T_rollout], J=J),
                 'initial_states' : initial_states,
+                
+                'obs_operator' : obs_operator_str,
+                'obs_operator_args' : obs_operator_args,
 
                 'loss_vals_LBFGS_full_backsolve' : loss_vals_LBFGS_full_backsolve, 
                 'loss_vals_LBFGS_full_persistence' : loss_vals_LBFGS_full_persistence,
