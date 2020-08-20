@@ -59,7 +59,7 @@ class ObsOp_subsampleGaussian(ObsOp_identity):
         assert 0. <= r <=1.
         self.r = as_tensor(r)
         self.mdistr = torch.distributions.Bernoulli(probs=1-self.r)
-        self.mask = 1.        
+        self.mask = 1.
 
     def _sample_mask(self, sample_shape):
         self.mask = self.mdistr.sample(sample_shape=sample_shape)
@@ -157,7 +157,7 @@ def optim_initial_state(
     
     loss_masks = [torch.ones((N,J+1,K)) for i in range(n_chunks)] if loss_masks is None else loss_masks
     assert len(loss_masks) == n_chunks
-    
+
     i_ = 0
     for j in range(n_chunks):
 
@@ -187,7 +187,7 @@ def optim_initial_state(
 
             i_n = 0
             for i in range(n_steps//n_chunks):
-                
+
                 with torch.no_grad():
                     loss = - gen.log_prob(y=target[n:n+1], m=loss_masks[j][n:n+1])
                     if torch.isnan(loss):
@@ -461,10 +461,10 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir
 
     x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_sols_backsolve]
     res = optim_initial_state(
-      model_forwarder, model_observer, prior, 
+      model_forwarder, model_observer, prior,
       T_rollouts, T_obs, N, n_chunks,
       n_steps, optimizer_pars,
-      x_inits, targets, grndtrths, 
+      x_inits, targets, grndtrths,
       loss_masks=loss_masks)
 
     x_sols_LBFGS_full_backsolve, loss_vals_LBFGS_full_backsolve = res[0], res[1]
