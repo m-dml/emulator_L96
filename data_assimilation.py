@@ -28,6 +28,7 @@ system_pars = {
     'J' : 10,
     'T' : 605,
     'dt' : 0.01,
+    'back_solve_dt_fac' : 1000,
     'N_trials' : 1,
     'spin_up_time' : 5.,
     'train_frac' : 0.8,
@@ -44,9 +45,9 @@ setup_pars = {
     'n_starts' : np.arange(int(system_pars['spin_up_time']/system_pars['dt']),
                            int(system_pars['train_frac']*system_pars['T']/system_pars['dt']),
                            8* int(system_pars['spin_up_time']/system_pars['dt'])),
-    'T_rollout' : 40,
-    'n_chunks' : 40,
-    'n_steps' : 1000, # total number of gradient steps (across all chunks !)
+    'T_rollout' : 40,          # number of rollout steps (by model_forwarder, e.g. RK4 step)
+    'n_chunks' : 40,           # number of intermediate chunks to try solving for initial state
+    'n_chunks_recursive' : 40, # for recursive methods (such as solving forward in reverse), can give more chunks
     'prediction_task' : 'state',
     'lead_time' : 1
 }
@@ -67,13 +68,21 @@ optimizer_pars = {
               'max_eval' : None,
               'tolerance_grad' : 1e-07,
               'tolerance_change' : 1e-09,
-              'history_size': 10,
-              'back_solve_dt_fac' : 1000
+              'history_size': 10
+}
+
+optimiziation_schemes{
+    'LBFGS_chunks' : True,
+    'LBFGS_full_chunks' : True,
+    'LBFGS_full_backsolve' : True,
+    'LBFGS_full_persistence' : True, 
+    'LBFGS_recurse_chunks' : True
 }
 
 solve_initstate(system_pars=system_pars,
                 model_pars=model_pars,
                 optimizer_pars=optimizer_pars,
                 setup_pars=setup_pars,
+                optimiziation_schemes=optimiziation_schemes,
                 res_dir=res_dir,
                 data_dir=data_dir)

@@ -233,7 +233,7 @@ def optim_initial_state(
     return x_sols, loss_vals, time_vals, state_mses
 
 
-def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir, data_dir):
+def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiziation_schemes, res_dir, data_dir):
 
     # extract key variable names from input dicts
     K, J = system_pars['K'], system_pars['J']
@@ -268,6 +268,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir
             'prediction_task' = setup_pars['prediction_task'],
             'train_frac' :  system_pars['train_frac'],
             'normalize_data' : system_pars['normalize_data'],
+            'back_solve_dt_fac' : system_pars['back_solve_dt_fac'],
             'F' : system_pars['F'], 
             'h' : system_pars['h'], 
             'b' : system_pars['b'], 
@@ -277,7 +278,6 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir
             'conf_exp' : args['conf_exp'],
             'model_forwarder' : model_pars['model_forwarder'], # should still be string
             'dt_net' : model_pars['dt_net'],
-            'back_solve_dt_fac' : optimizer_pars['back_solve_dt_fac'],
 
             'n_starts' : n_starts,
             'T_rollout' : T_rollout,
@@ -319,8 +319,8 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir
                                  resimulate=True, solver=rk4_default,
                                  save_sim=False, data_dir=data_dir)
 
-    res['initial_states'] = [out[n_starts+j*T_rollout//n_chunks] for j in range(n_chunks)]
-    res['initial_states'] = np.stack([sortL96intoChannels(z,J=J) for z in res['initial_states']])
+    grndtrths = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)] for j in range(n_chunks)]
+    res['initial_states'] = np.stack([sortL96intoChannels(z,J=J) for z in grndtrths])
     res['targets'] = sortL96intoChannels(out[n_starts+T_rollout], J=J)
     
     DatasetClass = sel_dataset_class(prediction_task=res['prediction_task'],N_trials=1)
@@ -355,110 +355,140 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir
 
     # ## L-BFGS, solve across full rollout time recursively, initialize from forward solver in reverse
 
-    print('\n')
-    print('L-BFGS, solve across full rollout time recursively, initialize from forward solver in reverse')
-    print('\n')
+    if optimiziation_schemes['LBFGS_recurse_chunks']:
+        print('\n')
+        print('L-BFGS, solve across full rollout time recursively, initialize from forward solver in reverse')
+        print('\n')
 
-    x_inits = [None for z in range(n_chunks)]
-    times_eb = dt * np.linspace(0, T_rollout//n_chunks, res['back_solve_dt_fac'] * (T_rollout//n_chunks)+1)
-    def exp_bs(x_init): # decorator
-        return explicit_backsolve(x_init, times_eb=times_eb, fun_eb=fun_eb)
-    x_inits[0] = sortL96intoChannels(exp_bs(res['targets_obs']), J=J)    
-    
-    opt_res = optim_initial_state(
-        model_forwarder=model_forwarder, 
-        model_observer=model_observer, 
-        prior=prior, 
-        T_rollouts=T_rollouts, 
-        T_obs=T_obs, 
-        N=N, 
-        n_chunks=n_chunks,
-        n_steps=n_steps, 
-        optimizer_pars=optimizer_pars,
-        x_inits=x_inits, 
-        targets=targets, 
-        grndtrths=grndtrths, 
-        loss_masks=loss_masks, 
-        f_init=exp_bs)
+        x_inits = [None for z in range(n_chunks)]
+        times_eb = dt * np.linspace(0, T_rollout//n_chunks, res['back_solve_dt_fac'] * (T_rollout//n_chunks)+1)
+        def exp_bs(x_init): # decorator
+            return explicit_backsolve(x_init, times_eb=times_eb, fun_eb=fun_eb)
+        x_inits[0] = sortL96intoChannels(exp_bs(res['targets_obs']), J=J)
 
-    res['x_sols_LBFGS_recurse_chunks'] = opt_res[0]
-    res['loss_vals_LBFGS_recurse_chunks'] = opt_res[1]
-    res['time_vals_LBFGS_recurse_chunks'] = opt_res[2]
-    res['state_mses_LBFGS_recurse_chunks'] = opt_res[3]
+        opt_res = optim_initial_state(
+            model_forwarder=model_forwarder,
+            model_observer=model_observer,
+            prior=prior,
+            T_rollouts=T_rollouts,
+            T_obs=T_obs,
+            N=N,
+            n_chunks=n_chunks,
+            n_steps=n_steps,
+            optimizer_pars=optimizer_pars,
+            x_inits=x_inits,
+            targets=targets,
+            grndtrths=grndtrths,
+            loss_masks=loss_masks,
+            f_init=exp_bs)
 
-    print('\n')
-    print('storing results')
-    print('\n')
-    np.save(res_dir + fn, arr=res)
+        res['x_sols_LBFGS_recurse_chunks'] = opt_res[0]
+        res['loss_vals_LBFGS_recurse_chunks'] = opt_res[1]
+        res['time_vals_LBFGS_recurse_chunks'] = opt_res[2]
+        res['state_mses_LBFGS_recurse_chunks'] = opt_res[3]
+
+        print('\n')
+        print('storing results')
+        print('\n')
+        np.save(res_dir + fn, arr=res)
 
     # ## L-BFGS, solve across single chunks recursively, initialize from last chunk
 
-    print('\n')
-    print('L-BFGS, solve across single chunks recursively, initialize from last chunk')
-    print('\n')
+    if optimiziation_schemes['LBFGS_chunks']:
+        print('\n')
+        print('L-BFGS, solve across single chunks recursively, initialize from last chunk')
+        print('\n')
 
-    T_rollouts_chunks = np.ones(n_chunks, dtype=np.int) * (T_rollout//n_chunks)
-    targets_chunks = [None for i in range(n_chunks)]
-    targets_chunks[0] = 1.*res['targets_obs']
-    loss_masks_chunks = [None for i in range(n_chunks)]
-    loss_masks_chunks[0] = 1.*res['loss_mask']
+        T_rollouts_chunks = np.ones(n_chunks, dtype=np.int) * (T_rollout//n_chunks)
+        targets_chunks = [None for i in range(n_chunks)]
+        targets_chunks[0] = 1.*res['targets_obs']
+        loss_masks_chunks = [None for i in range(n_chunks)]
+        loss_masks_chunks[0] = 1.*res['loss_mask']
 
-    x_inits = [None for i in range(n_chunks)]
-    x_inits[0] = sortL96intoChannels(np.atleast_2d(out[n_starts+T_rollout].copy()),J=J)
+        x_inits = [None for i in range(n_chunks)]
+        x_inits[0] = sortL96intoChannels(np.atleast_2d(out[n_starts+T_rollout].copy()),J=J)
 
-    opt_res = optim_initial_state(
-        model_forwarder=model_forwarder, 
-        model_observer=model_observer, 
-        prior=prior, 
-        T_rollouts=T_rollouts_chunks, 
-        T_obs=T_obs, 
-        N=N, 
-        n_chunks=n_chunks,
-        n_steps=n_steps, 
-        optimizer_pars=optimizer_pars,
-        x_inits=x_inits, 
-        targets=targets_chunks, 
-        grndtrths=grndtrths, 
-        loss_masks=loss_masks_chunks)
+        opt_res = optim_initial_state(
+            model_forwarder=model_forwarder,
+            model_observer=model_observer,
+            prior=prior,
+            T_rollouts=T_rollouts_chunks,
+            T_obs=T_obs,
+            N=N,
+            n_chunks=n_chunks,
+            n_steps=n_steps,
+            optimizer_pars=optimizer_pars,
+            x_inits=x_inits,
+            targets=targets_chunks,
+            grndtrths=grndtrths,
+            loss_masks=loss_masks_chunks)
 
-    res['x_sols_LBFGS_chunks'] = opt_res[0]
-    res['loss_vals_LBFGS_chunks'] = opt_res[1]
-    res['time_vals_LBFGS_chunks'] = opt_res[2]
-    res['state_mses_LBFGS_chunks'] = opt_res[3]
+        res['x_sols_LBFGS_chunks'] = opt_res[0]
+        res['loss_vals_LBFGS_chunks'] = opt_res[1]
+        res['time_vals_LBFGS_chunks'] = opt_res[2]
+        res['state_mses_LBFGS_chunks'] = opt_res[3]
 
-    print('\n')
-    print('storing results')
-    print('\n')
-    np.save(res_dir + fn, arr=res)
+        print('\n')
+        print('storing results')
+        print('\n')
+        np.save(res_dir + fn, arr=res)
 
 
     # ## L-BFGS, solve across full rollout time in one go, initialize from chunked approach
 
+    if optimiziation_schemes['LBFGS_full_chunks']:
+        print('\n')
+        print('L-BFGS, solve across full rollout time in one go, initialize from chunked approach')
+        print('\n')
+
+        x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_sols_LBFGS_chunks]
+
+        opt_res = optim_initial_state(
+            model_forwarder=model_forwarder,
+            model_observer=model_observer,
+            prior=prior,
+            T_rollouts=T_rollouts,
+            T_obs=T_obs,
+            N=N,
+            n_chunks=n_chunks,
+            n_steps=n_steps,
+            optimizer_pars=optimizer_pars,
+            x_inits=x_inits,
+            targets=targets,
+            grndtrths=grndtrths,
+            loss_masks=loss_masks)
+
+        res['x_sols_LBFGS_full_chunks'] = opt_res[0]
+        res['loss_vals_LBFGS_full_chunks'] = opt_res[1]
+        res['time_vals_LBFGS_full_chunks'] = opt_res[2]
+        res['state_mses_LBFGS_full_chunks'] = opt_res[3]
+
+        print('\n')
+        print('storing results')
+        print('\n')
+        np.save(res_dir + fn, arr=res)
+
+
+    # ## numerical forward solve in reverse
+
     print('\n')
-    print('L-BFGS, solve across full rollout time in one go, initialize from chunked approach')
+    print('numerical forward solve in reverse')
     print('\n')
 
-    x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_sols_LBFGS_chunks] 
 
-    opt_res = optim_initial_state(
-        model_forwarder=model_forwarder, 
-        model_observer=model_observer, 
-        prior=prior, 
-        T_rollouts=T_rollouts, 
-        T_obs=T_obs, 
-        N=N, 
-        n_chunks=n_chunks,
-        n_steps=n_steps, 
-        optimizer_pars=optimizer_pars,
-        x_inits=x_inits, 
-        targets=targets, 
-        grndtrths=grndtrths, 
-        loss_masks=loss_masks)
+    res['state_mses_backsolve'] = np.zeros(n_chunks, len(n_starts))
+    es['time_vals_backsolve'] = np.zeros(n_chunks, len(n_starts))
+    res['x_sols_backsolve'] = np.zeros((n_chunks, len(n_starts), K*(J+1)))
 
-    res['x_sols_LBFGS_full_chunks'] = opt_res[0]
-    res['loss_vals_LBFGS_full_chunks'] = opt_res[1]
-    res['time_vals_LBFGS_full_chunks'] = opt_res[2]
-    res['state_mses_LBFGS_full_chunks'] = opt_res[3]
+    for j in range(n_chunks):
+        times_eb = dt * np.linspace(0, T_rollouts[j], res['back_solve_dt_fac'] * T_rollouts[j]+1) 
+        print('backward solving')
+        res['time_vals_backsolve'][j] = time.time()
+
+        res['x_sols_backsolve'][j] = explicit_backsolve(res['targets_obs'], times_eb, fun_eb)
+
+        res['time_vals_backsolve'][j] = time.time() - res['time_vals_backsolve'][j]
+        res['state_mses_backsolve'][j] = ((res['x_sols_backsolve'][j] - grndtrths[j])**2).mean(axis=1)
 
     print('\n')
     print('storing results')
@@ -468,84 +498,76 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir
 
     # ## L-BFGS, solve across full rollout time in one go, initiate from backward solution
 
-    print('\n')
-    print('L-BFGS, solve across full rollout time in one go, initiate from backward solution')
-    print('\n')
+    if optimiziation_schemes['LBFGS_full_backsolve']:
 
-    state_mses_backsolve = np.zeros(n_chunks, len(n_starts))
-    time_vals_backsolve = np.zeros(n_chunks, len(n_starts))
-    x_sols_backsolve = np.zeros((n_chunks, len(n_starts), K*(J+1)))
+        print('\n')
+        print('L-BFGS, solve across full rollout time in one go, initiate from backward solution')
+        print('\n')
 
-    for j in range(n_chunks):
-        times_eb = dt * np.linspace(0, T_rollouts[j], res['back_solve_dt_fac'] * T_rollouts[j]+1) 
-        print('backward solving')
-        time_vals_backsolve[j] = time.time()
-        x_sols_backsolve[j] = explicit_backsolve(res['targets_obs'], times_eb, fun_eb)
-        time_vals_backsolve[j] = time.time() - time_vals_backsolve[j] 
-        state_mses_backsolve[j] = ((x_sols_backsolve[j] - out[n_starts+T_rollout-(j+1)*T_rollout//n_chunks])**2).mean(axis=1)
+        x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_sols_backsolve]
 
-    x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_sols_backsolve]
+        opt_res = optim_initial_state(
+            model_forwarder=model_forwarder,
+            model_observer=model_observer,
+            prior=prior,
+            T_rollouts=T_rollouts,
+            T_obs=T_obs,
+            N=N,
+            n_chunks=n_chunks,
+            n_steps=n_steps,
+            optimizer_pars=optimizer_pars,
+            x_inits=x_inits,
+            targets=targets,
+            grndtrths=grndtrths,
+            loss_masks=loss_masks)
 
-    opt_res = optim_initial_state(
-        model_forwarder=model_forwarder, 
-        model_observer=model_observer, 
-        prior=prior, 
-        T_rollouts=T_rollouts, 
-        T_obs=T_obs, 
-        N=N, 
-        n_chunks=n_chunks,
-        n_steps=n_steps, 
-        optimizer_pars=optimizer_pars,
-        x_inits=x_inits, 
-        targets=targets, 
-        grndtrths=grndtrths, 
-        loss_masks=loss_masks)
+        res['x_sols_LBFGS_full_backsolve'] = opt_res[0]
+        res['loss_vals_LBFGS_full_backsolve'] = opt_res[1]
+        res['time_vals_LBFGS_full_backsolve'] = opt_res[2]
+        res['state_mses_LBFGS_full_backsolve'] = opt_res[3]
 
-    res['x_sols_LBFGS_full_backsolve'] = opt_res[0]
-    res['loss_vals_LBFGS_full_backsolve'] = opt_res[1]
-    res['time_vals_LBFGS_full_backsolve'] = opt_res[2]
-    res['state_mses_LBFGS_full_backsolve'] = opt_res[3]
-
-    print('\n')
-    print('storing results')
-    print('\n')
-    np.save(res_dir + fn, arr=res)
+        print('\n')
+        print('storing results')
+        print('\n')
+        np.save(res_dir + fn, arr=res)
 
 
     # ## L-BFGS, solve across full rollout time in one go
     # - warning, this can be excruciatingly slow and hard to converge !
 
-    print('\n')
-    print('L-BFGS, solve across full rollout time in one go')
-    print('\n')
+    if optimiziation_schemes['BFGS_full_persistence']:
 
-    x_init = sortL96intoChannels(out[n_starts+T_rollout], J=J)
-    x_inits = [x_init.copy() for j in range(n_chunks)]
+        print('\n')
+        print('L-BFGS, solve across full rollout time in one go')
+        print('\n')
 
-    opt_res = optim_initial_state(
-        model_forwarder=model_forwarder, 
-        model_observer=model_observer, 
-        prior=prior, 
-        T_rollouts=T_rollouts, 
-        T_obs=T_obs, 
-        N=N, 
-        n_chunks=n_chunks,
-        n_steps=n_steps, 
-        optimizer_pars=optimizer_pars,
-        x_inits=x_inits, 
-        targets=targets, 
-        grndtrths=grndtrths, 
-        loss_masks=loss_masks)
-    
-    res['x_sols_LBFGS_full_persistence'] = opt_res[0]
-    res['loss_vals_LBFGS_full_persistence'] = opt_res[1]
-    res['time_vals_LBFGS_full_persistence'] = opt_res[2]
-    res['state_mses_LBFGS_full_persistence'] = opt_res[3]
+        x_init = sortL96intoChannels(out[n_starts+T_rollout], J=J)
+        x_inits = [x_init.copy() for j in range(n_chunks)]
 
-    print('\n')
-    print('storing results')
-    print('\n')
-    np.save(res_dir + fn, arr=res)
+        opt_res = optim_initial_state(
+            model_forwarder=model_forwarder,
+            model_observer=model_observer,
+            prior=prior,
+            T_rollouts=T_rollouts,
+            T_obs=T_obs,
+            N=N,
+            n_chunks=n_chunks,
+            n_steps=n_steps,
+            optimizer_pars=optimizer_pars,
+            x_inits=x_inits,
+            targets=targets,
+            grndtrths=grndtrths,
+            loss_masks=loss_masks)
+
+        res['x_sols_LBFGS_full_persistence'] = opt_res[0]
+        res['loss_vals_LBFGS_full_persistence'] = opt_res[1]
+        res['time_vals_LBFGS_full_persistence'] = opt_res[2]
+        res['state_mses_LBFGS_full_persistence'] = opt_res[3]
+
+        print('\n')
+        print('storing results')
+        print('\n')
+        np.save(res_dir + fn, arr=res)
     
     print('\n')
     print('done')
