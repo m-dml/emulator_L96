@@ -44,10 +44,10 @@ system_pars = {
 setup_pars = {
     'n_starts' : np.arange(int(system_pars['spin_up_time']/system_pars['dt']),
                            int(system_pars['train_frac']*system_pars['T']/system_pars['dt']),
-                           8*6* int(system_pars['spin_up_time']/system_pars['dt'])),
-    'T_rollout' : 10,          # number of rollout steps (by model_forwarder, e.g. RK4 step)
-    'n_chunks' : 2,            # number of intermediate chunks to try solving for initial state
-    'n_chunks_recursive' : 10, # for recursive methods (such as solving forward in reverse), can give more chunks
+                           8*3* int(system_pars['spin_up_time']/system_pars['dt'])),
+    'T_rollout' : 40,          # number of rollout steps (by model_forwarder, e.g. RK4 step)
+    'n_chunks' : 8,            # number of intermediate chunks to try solving for initial state
+    'n_chunks_recursive' : 40, # for recursive methods (such as solving forward in reverse), can give more chunks
     'prediction_task' : 'state',
     'lead_time' : 1
 }
@@ -62,9 +62,9 @@ model_pars = {
 
 optimizer_pars = {
               'optimizer' : 'LBFGS',
-              'n_steps' : 80,
+              'n_steps' : 50,
               'lr' : 1e0,
-              'max_iter' : 10,
+              'max_iter' : 1000,
               'max_eval' : None,
               'tolerance_grad' : 1e-07,
               'tolerance_change' : 1e-09,
