@@ -25,9 +25,9 @@ data_dir = '/gpfs/work/nonnenma/data/emulators/L96/'
 
 system_pars = {
     'K' : 36,
-    'J' : 0,
+    'J' : 10,
     'T' : 605,
-    'dt' : 0.05,
+    'dt' : 0.01,
     'N_trials' : 1,
     'spin_up_time' : 5.,
     'train_frac' : 0.8,
@@ -36,8 +36,8 @@ system_pars = {
     'h' : 1.,
     'b' : 10.,
     'c' : 10.,
-    'obs_operator' : ObsOp_identity, #ObsOp_identity, #ObsOp_subsampleGaussian,
-    'obs_operator_args' : {} #{'r' : 0.0, 'sigma2' : 1.0} #{} #{'r' : 0.5, 'sigma2' : 1.0}
+    'obs_operator' : ObsOp_subsampleGaussian, #ObsOp_identity, #ObsOp_subsampleGaussian,
+    'obs_operator_args' : {'r' : 0.5, 'sigma2' : 1.0} #{'r' : 0.0, 'sigma2' : 1.0} #{} #{'r' : 0.5, 'sigma2' : 1.0}
 }
 
 setup_pars = {
@@ -50,11 +50,12 @@ setup_pars = {
     'prediction_task' : 'state',
     'lead_time' : 1
 }
-setup_pars['N'] = len(setup_pars['n_starts'])
 
 model_pars = {
-    'exp_id' : 24,
+    'exp_id' : 23,
     'model_forwarder' : 'rk4_default',
+    'K_net' : system_pars['K'],
+    'J_net' : system_pars['J'],
     'dt_net' : system_pars['dt']
 }
 
