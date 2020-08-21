@@ -151,9 +151,9 @@ def optim_initial_state(
     J, K = sample_shape[-2]-1, sample_shape[-1]
     
     x_sols = np.zeros((n_chunks, N, K*(J+1)))
-    loss_vals = np.zeros((n_steps,N))
+    loss_vals = np.inf * np.ones((n_steps,N))
     time_vals = time.time() * np.ones((n_steps,N))
-    state_mses = np.zeros(n_chunks)
+    state_mses = np.inf * np.ones((n_chunks, N))
     
     loss_masks = [torch.ones((N,J+1,K)) for i in range(n_chunks)] if loss_masks is None else loss_masks
     assert len(loss_masks) == n_chunks
@@ -201,18 +201,19 @@ def optim_initial_state(
                     loss.backward()
                     return loss
                 optimizer.step(closure)
-                loss_vals[i_n,n] = loss.detach().cpu().numpy()
-                time_vals[i_n,n] = time.time() - time_vals[i_n,n]
+                loss_vals[i_+i_n,n] = loss.detach().cpu().numpy()
+                time_vals[i_+i_n,n] = time.time() - time_vals[i_+i_n,n]
                 print((time_vals[i_n,n], loss_vals[i_n,n]))
                 i_n += 1
 
             x_sols[j][n] = sortL96fromChannels(gen.X.detach().cpu().numpy().copy())
 
-        i_ += i_n
+
+            state_mses[j][n] = ((x_sols[j][n] - grndtrths[j][n])**2).mean()
 
         if j < n_chunks - 1 and targets[j+1] is None:
             targets[j+1] = x_sols[j].copy()
-        state_mses[j] = ((x_sols[j] - grndtrths[j])**2).mean()
+        i_ += i_n
 
         with torch.no_grad():  
             print('Eucl. distance to initial value', mse_loss_fullyObs(x_sols[j], grndtrths[j]))
@@ -298,6 +299,13 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir
         def fun_eb(t, x):
             return - f1(x, F, dX_dt, K)
 
+    def explicit_backsolve(x_init, times_eb, fun_eb):
+        x_sols = np.zeros_like(x_init)
+        for i__ in range(x_init.shape[0]):
+            out2 = rk4_default(fun=fun_eb, y0=x_init[i__], times=times_eb)
+            x_sols[i__] = out2[-1].copy()#.detach().cpu().numpy().copy()
+        return x_sols
+        
     def model_eb(t, x):
         return - sortL96fromChannels(model.forward(sortL96intoChannels(x,J=J)))
 
@@ -367,14 +375,8 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir
     x_inits = [None for z in range(n_chunks)]
 
     times_eb = dt * np.linspace(0, T_rollout//n_chunks, back_solve_dt_fac * (T_rollout//n_chunks)+1)
-    def explicit_backsolve(x_init):
-        x_init = sortL96fromChannels(x_init)
-        x_sols = np.zeros_like(x_init)
-        for i__ in range(x_init.shape[0]):
-            out2 = rk4_default(fun=fun_eb, y0=x_init[i__], times=times_eb)
-            x_sols[i__] = out2[-1].copy()#.detach().cpu().numpy().copy()
-        return sortL96intoChannels(x_sols,J=J)
-    x_inits[0] = explicit_backsolve(sortL96intoChannels(target_obs,J=J))
+    x_inits[0] = sortL96intoChannels(explicit_backsolve(target_obs, times_eb, fun_eb), J=J)
+
 
     targets = [1.*target_obs for i in range(n_chunks)]
     loss_masks = [1.*model_observer.mask for i in range(n_chunks)]
@@ -440,24 +442,20 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, res_dir
     print('L-BFGS, solve across full rollout time in one go, initiate from backward solution')
     print('\n')
 
-    state_mses_backsolve = np.zeros(n_chunks)
-    time_vals_backsolve = np.zeros(n_chunks)
+    state_mses_backsolve = np.zeros(n_chunks, len(n_starts))
+    time_vals_backsolve = np.zeros(n_chunks, len(n_starts))
 
     x_sols_backsolve = np.zeros((n_chunks, len(n_starts), K*(J+1)))
     i_ = 0
     for j in range(n_chunks):
 
         T_i = T_rollouts[j]
-        times = dt * np.linspace(0, T_i, back_solve_dt_fac * T_i+1) # note the increase in temporal resolution!
+        times_eb = dt * np.linspace(0, T_i, back_solve_dt_fac * T_i+1) # note the increase in temporal resolution!
         print('backward solving')
         time_vals_backsolve[j] = time.time()
-        x_init = np.zeros((len(n_starts), K*(J+1)))
-        for i__ in range(len(n_starts)):
-            out2 = rk4_default(fun=fun_eb, y0=out[n_starts[i__]+T_rollout].copy(), times=times)
-            x_init[i__] = out2[-1].copy()
-        x_sols_backsolve[j] = x_init.copy()
-        time_vals_backsolve[j] = time.time() - time_vals_backsolve[j]
-        state_mses_backsolve[j] = ((x_sols_backsolve[j] - out[n_starts+T_rollout-(j+1)*T_rollout//n_chunks])**2).mean()
+        x_sols_backsolve[j] = explicit_backsolve(target_obs, times_eb, fun_eb)
+        time_vals_backsolve[j] = time.time() - time_vals_backsolve[j] 
+        state_mses_backsolve[j] = ((x_sols_backsolve[j] - out[n_starts+T_rollout-(j+1)*T_rollout//n_chunks])**2).mean(axis=1)
 
     x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_sols_backsolve]
     res = optim_initial_state(
