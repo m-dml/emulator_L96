@@ -194,7 +194,7 @@ def optim_initial_state(
                     loss = - gen.log_prob(y=target[n:n+1], m=loss_masks[j][n:n+1])
                     if torch.isnan(loss):
                         loss_vals[i_n,n] = loss.detach().cpu().numpy()
-                        i_n += 1
+                        time_vals[i_+i_n,n] = time.time() - time_vals[i_+i_n,n]
                         continue
 
                 def closure():
@@ -352,7 +352,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     elif res['model_forwarder'] == 'predictor_corrector':
         Model_forwarder = Model_forwarder_predictorCorrector
 
-    model_forwarder_eb = Model_forwarder(model=Model_eb(model), dt=dt)
+    model_forwarder_eb = Model_forwarder(model=Model_eb(model), dt=dt/res['back_solve_dt_fac'])
 
 
     # ### get data for 'typical' L96 state sequences
@@ -362,7 +362,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
                                  resimulate=True, solver=rk4_default,
                                  save_sim=False, data_dir=data_dir)
 
-    grndtrths = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)] for j in range(n_chunks)]
+    grndtrths = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks_recursive)] for j in range(n_chunks_recursive)]
     res['initial_states'] = np.stack([sortL96intoChannels(z,J=J) for z in grndtrths])
     res['targets'] = sortL96intoChannels(out[n_starts+T_rollout], J=J)
     
@@ -418,7 +418,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
 
         def exp_bs(x_init): # torch decorator
             x = as_tensor(x_init)
-            for t in range(T_rollout//n_chunks_recursive):
+            for t in range(res['back_solve_dt_fac'] *(T_rollout//n_chunks_recursive)):
                 x = model_forwarder_eb.forward(x)
             return x.detach().cpu().numpy()
 
