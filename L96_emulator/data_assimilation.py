@@ -232,17 +232,20 @@ def optim_initial_state(
             if not f_init is None:
                 x_inits[j+1] = f_init(x_inits[j+1])
 
-    """
     # correting time stamps for solving multiple trials sequentially
-    for j in range(n_chunks)[::-1]:
-        for n in range(N)[::-1]:
-            if n > 0:
-                time_vals[j*n_steps+np.arange(n_steps),n] -= time_vals[(j+1)*n_steps-1,n-1]
+    for j in range(n_chunks):
+        top_new = time_vals[(j+1)*n_steps-1,N-1]
+        for n in range(1,N)[::-1]:
+            # correct for the fact that n-1 other problems were solve before for this j
+            time_vals[j*n_steps+np.arange(n_steps),n] -= time_vals[(j+1)*n_steps-1,n-1]
             if j > 0:
+                # continue from j-1 for this n
                 time_vals[j*n_steps+np.arange(n_steps),n] += time_vals[j*n_steps-1,n]
-                if n == 0:
-                    time_vals[j*n_steps+np.arange(n_steps),n] -= time_vals[j*n_steps-1,N-1]                
-    """
+        if j > 0:
+            # for first trial (n=0) of this j, clear previous time and continue from j-1
+            time_vals[j*n_steps+np.arange(n_steps),0] -= top_old
+            time_vals[j*n_steps+np.arange(n_steps),0] += time_vals[j*n_steps-1,0]
+        top_old = top_new             
                 
     return x_sols, loss_vals, time_vals, state_mses
 
