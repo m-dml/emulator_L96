@@ -25,9 +25,9 @@ data_dir = '/gpfs/work/nonnenma/data/emulators/L96/'
 
 system_pars = {
     'K' : 36,
-    'J' : 10,
+    'J' : 0,
     'T' : 605,
-    'dt' : 0.01,
+    'dt' : 0.05,
     'back_solve_dt_fac' : 1000,
     'N_trials' : 1,
     'spin_up_time' : 5.,
@@ -37,23 +37,23 @@ system_pars = {
     'h' : 1.,
     'b' : 10.,
     'c' : 10.,
-    'obs_operator' : ObsOp_subsampleGaussian, #ObsOp_identity, #ObsOp_subsampleGaussian,
-    'obs_operator_args' : {'r' : 0.5, 'sigma2' : 1.0} #{'r' : 0.0, 'sigma2' : 1.0} #{} #{'r' : 0.5, 'sigma2' : 1.0}
+    'obs_operator' : ObsOp_identity, #ObsOp_identity, #ObsOp_subsampleGaussian,
+    'obs_operator_args' : {} #{'r' : 0.0, 'sigma2' : 1.0} #{} #{'r' : 0.5, 'sigma2' : 1.0}
 }
 
 setup_pars = {
     'n_starts' : np.arange(int(system_pars['spin_up_time']/system_pars['dt']),
                            int(system_pars['train_frac']*system_pars['T']/system_pars['dt']),
-                           8* int(system_pars['spin_up_time']/system_pars['dt'])),
-    'T_rollout' : 40,          # number of rollout steps (by model_forwarder, e.g. RK4 step)
-    'n_chunks' : 40,           # number of intermediate chunks to try solving for initial state
-    'n_chunks_recursive' : 40, # for recursive methods (such as solving forward in reverse), can give more chunks
+                           8*6* int(system_pars['spin_up_time']/system_pars['dt'])),
+    'T_rollout' : 10,          # number of rollout steps (by model_forwarder, e.g. RK4 step)
+    'n_chunks' : 2,            # number of intermediate chunks to try solving for initial state
+    'n_chunks_recursive' : 10, # for recursive methods (such as solving forward in reverse), can give more chunks
     'prediction_task' : 'state',
     'lead_time' : 1
 }
 
 model_pars = {
-    'exp_id' : 23,
+    'exp_id' : 24,
     'model_forwarder' : 'rk4_default',
     'K_net' : system_pars['K'],
     'J_net' : system_pars['J'],
@@ -62,18 +62,19 @@ model_pars = {
 
 optimizer_pars = {
               'optimizer' : 'LBFGS',
-              'n_steps' : setup_pars['n_steps']//setup_pars['n_chunks'],
+              'n_steps' : 80,
               'lr' : 1e0,
-              'max_iter' : 1000,
+              'max_iter' : 10,
               'max_eval' : None,
               'tolerance_grad' : 1e-07,
               'tolerance_change' : 1e-09,
               'history_size': 10
 }
 
-optimiziation_schemes{
+optimiziation_schemes = {
     'LBFGS_chunks' : True,
     'LBFGS_full_chunks' : True,
+    'backsolve' : True, 
     'LBFGS_full_backsolve' : True,
     'LBFGS_full_persistence' : True, 
     'LBFGS_recurse_chunks' : True
