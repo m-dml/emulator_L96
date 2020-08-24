@@ -32,6 +32,7 @@ class ObsOp_identity(torch.nn.Module):
 
     def forward(self, x): # deterministic part of observation operator
         """ y = f(x)  """
+        assert len(x.shape) == 3 # N x J+1 x K
         return x
 
     def sample(self, x, m=None): # observation operator (incl. stochastic parts)
@@ -44,10 +45,11 @@ class ObsOp_identity(torch.nn.Module):
 
     def log_prob(self, y, x, m=None):
         """ log p(y|x, m)  """
+        assert len(y.shape) == 3 # N x J+1 x K
         if m is None:
             return self.ndistr.log_prob(x - y).sum() # sum from iid over dims
         assert y.shape == m.shape and x.shape == y.shape
-        return (m * self.ndistr.log_prob(x - y)).sum() # sum from iid over dims
+        return (m * self.ndistr.log_prob(x - y)).sum(axis=(-2,-1)) # sum from iid over dims
 
 
 class ObsOp_subsampleGaussian(ObsOp_identity):
@@ -76,58 +78,96 @@ class ObsOp_subsampleGaussian(ObsOp_identity):
 
     def log_prob(self, y, x, m=None):
         """ log p(y|x, m)  """
+        assert len(y.shape) == 3 # N x J+1 x K
+
+        x = x.reshape(1, *x.shape) if len(x.shape)==2 else x
         if m is None:
             m = self.mask
-        assert y.shape == m.shape and x.shape == y.shape
-        return (m * self.ndistr.log_prob(x - y)).sum() # sum from iid over dims
+        m = m.reshape(1, *m.shape) if len(m.shape)==2 else x
+        assert y.shape[1:] == m.shape[1:] and x.shape[1:] == y.shape[1:]
+
+        return (m * self.ndistr.log_prob(x - y)).sum(axis=(-2,-1)) # sum from iid over dims
 
 
 class GenModel(torch.nn.Module):
 
     def __init__(self, model_forwarder, model_observer, prior, 
-                 T=1, T_obs=None, x_init=None):
+                 T=1, x_init=None):
 
         super(GenModel, self).__init__()
 
         self.model_forwarder = model_forwarder
-        self.T = T
+        self.set_rollout_len(T)
 
         self.model_observer = model_observer
-        self.T_obs = [T-1] if T_obs is None else T_obs
+        self.masks = [self.model_observer.mask]
 
         self.prior = prior        
-        x_init = self.prior.sample() if x_init is None else x_init        
 
-        assert x_init.ndim in [2,3]
         # variable container for e.g. maximim-likelihood estimate: 
-        self.X = torch.nn.Parameter(torch.as_tensor(x_init, device=device, dtype=dtype))
+        x_init = self.prior.sample() if x_init is None else x_init
+        assert len(x_init.shape) in [2,3]
+        self.set_state(x_init)
 
-    def forward(self, x=None, T=None):
 
-        x = self.X if x is None else x
-        T = self.T if T is None else T
-        y = []
-        for t in range(self.T):
-            x = self.model_forwarder.forward(x)
-            if t in self.T_obs:
-                y.append(self.model_observer.forward(x))
-        return torch.stack(y)
-
-    def sample(self, x=None, m=None, T=None):
+    def _forward(self, x=None, T_obs=None):
 
         x = self.X if x is None else x
-        T = self.T if T is None else T
+        if len(x.shape) == 2:
+            x = x.reshape(1, *x.shape)
+        assert len(x.shape) == 3 # N x J+1 x K
+
+        T_obs = [self.T-1] if T_obs is None else T_obs
+
         y = []
-        for t in range(self.T):
+        for t in range(np.max(T_obs) + 1):
             x = self.model_forwarder.forward(x)
-            if t in self.T_obs:
-                y.append(self.model_observer.sample(x, m=m))
-        return torch.stack(y) if len(self.T_obs) > 1 else y[0]
+            if t in T_obs:
+                y.append(x)
 
-    def log_prob(self, y, x=None, m=None, T=None):
+        return y # returns a list of len(T_obs)!
 
-        log_probs = torch.stack([self.model_observer.log_prob(y_fwd, y, m=m) for y_fwd in self.forward(x, T)])
-        return log_probs.sum() # assuming observations are independent
+    def forward(self, x=None, T_obs=None):
+
+        y = [self.model_observer.forward(z) for z in self._forward(x, T_obs)]
+
+        return torch.stack(y, dim=0) # len(T_obs) x N x J+1 x K
+
+    def _sample_obs(self, y, m=None):
+
+        m = [None for t in range(len(y))] if m is None else m
+        assert len(m) == len(y)
+        self.masks = []
+        yn = []
+        for i in range(len(y)):
+            yn.append(self.model_observer.sample(y[i], m=m[i]))
+            self.masks.append(self.model_observer.mask)
+
+        return torch.stack(yn, dim=0) # len(T_obs) x N x J+1 x K
+
+    def sample(self, x=None, m=None, T_obs=None):
+
+        y = self._forward(x, T_obs)
+        
+        return self._sample_obs(self._forward(x, T_obs), m=m)
+
+    def log_prob(self, y, x=None, m=None, T_obs=None):
+
+        m = self.masks if m is None else m
+        xs = self.forward(x, T_obs) # # len(T_obs) x N x J+1 x K
+
+        log_probs = torch.stack([self.model_observer.log_prob(y_, x_, m_) for y_,x_, m_ in zip(y, xs, m)]) # len(T_obs) x N
+
+        return log_probs.sum(axis=0)
+
+    def set_state(self, x_init):
+
+        self.X = torch.nn.Parameter(as_tensor(x_init))
+
+    def set_rollout_len(self, T):
+
+        assert T >= 0
+        self.T = T
 
 
 def mse_loss_fullyObs(x, t):
@@ -143,13 +183,13 @@ def mse_loss_masked(x, t, m):
 
 
 def optim_initial_state(
-      model_forwarder, model_observer, prior, 
+      gen,
       T_rollouts, T_obs, N, n_chunks,
       optimizer_pars,
       x_inits, targets, grndtrths, 
       loss_masks=None, f_init=None):
 
-    sample_shape = prior.sample().shape # (..., J+1, K)
+    sample_shape = gen.prior.sample().shape # (..., J+1, K)
     J, K = sample_shape[-2]-1, sample_shape[-1]
     n_steps = optimizer_pars['n_steps']
 
@@ -169,6 +209,7 @@ def optim_initial_state(
         print('\n')
 
         target = sortL96intoChannels(as_tensor(targets[j]),J=J)
+        loss_mask = loss_masks[j]
 
         for n in range(N):
 
@@ -176,8 +217,9 @@ def optim_initial_state(
             print(f'optimizing over initial state #{n+1} / {N}')
             print('\n')
 
-            gen = GenModel(model_forwarder, model_observer, prior, T=T_rollouts[j], 
-                           T_obs=T_obs[j], x_init = x_inits[j][n:n+1])
+
+            gen.set_state(x_inits[j][n:n+1])
+            gen.set_rollout_len(T_rollouts[j])
 
             optimizer = torch.optim.LBFGS(params=[gen.X],
                                           lr=optimizer_pars['lr'],
@@ -191,14 +233,14 @@ def optim_initial_state(
             for i_n in range(n_steps):
 
                 with torch.no_grad():
-                    loss = - gen.log_prob(y=target[n:n+1], m=loss_masks[j][n:n+1])
+                    loss = - gen.log_prob(y=target[:len(T_obs[j]),n:n+1], m=loss_mask[:len(T_obs[j]),n:n+1], T_obs=T_obs[j])
                     if torch.isnan(loss):
                         loss_vals[i_n,n] = loss.detach().cpu().numpy()
                         time_vals[i_+i_n,n] = time.time() - time_vals[i_+i_n,n]
                         continue
 
                 def closure():
-                    loss = - gen.log_prob(y=target[n:n+1], m=loss_masks[j][n:n+1])
+                    loss = - gen.log_prob(y=target[:len(T_obs[j]),n:n+1], m=loss_mask[:len(T_obs[j]),n:n+1], T_obs=T_obs[j])
                     optimizer.zero_grad()
                     loss.backward()
                     return loss
@@ -220,12 +262,15 @@ def optim_initial_state(
         with torch.no_grad():  
             print('Eucl. distance to initial value', mse_loss_fullyObs(x_sols[j], grndtrths[j]))
             print('Eucl. distance to x_init', mse_loss_fullyObs(x_sols[j], sortL96fromChannels(x_inits[j])))
-            if loss_masks[j] is None:
-                print('Eucl. distance to target', mse_loss_fullyObs(x_sols[j], targets[j]))
-            else:
-                print('Eucl. distance to target', mse_loss_masked(x_sols[j], 
-                                                            targets[j],
-                                                            sortL96fromChannels(loss_masks[j]).detach().cpu().numpy()))
+            try:
+                if loss_masks[j] is None:
+                    print('Eucl. distance to target', mse_loss_fullyObs(x_sols[j], targets[j]))
+                else:
+                    print('Eucl. distance to target', mse_loss_masked(x_sols[j], 
+                                                                targets[j],
+                                                                sortL96fromChannels(loss_masks[j]).detach().cpu().numpy()))
+            except:
+                pass
 
         if j < n_chunks - 1 and x_inits[j+1] is None:
             x_inits[j+1] = sortL96intoChannels(x_sols[j], J=J).copy()
@@ -280,6 +325,15 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     # ### instantiate observation operator
     model_observer = system_pars['obs_operator'](**system_pars['obs_operator_args'])
 
+    
+    # ### define prior over initial states
+    prior = torch.distributions.normal.Normal(loc=torch.zeros((1,J+1,K)), 
+                                              scale=1.*torch.ones((1,J+1,K)))
+
+    
+    # ### define generative model for observed data
+    gen = GenModel(model_forwarder, model_observer, prior, T=T_rollout, x_init=None)
+    
     # prepare function output
     model_forwarder_str, optimizer_str = args['model_forwarder'], optimizer_pars['optimizer']
     exp_id, obs_operator_str = model_pars['exp_id'], model_observer.__class__.__name__
@@ -364,39 +418,39 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
 
     grndtrths = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks_recursive)] for j in range(n_chunks_recursive)]
     res['initial_states'] = np.stack([sortL96intoChannels(z,J=J) for z in grndtrths])
-    res['targets'] = sortL96intoChannels(out[n_starts+T_rollout], J=J)
+
+    T_obs = [[(j+1)*(T_rollout//n_chunks)-1 for j in range(n_+1)] for n_ in range(n_chunks)]
+    print('T_obs[-1]', T_obs[-1])
+    res['targets'] = np.stack([sortL96intoChannels(out[n_starts+t+1], J=J) for t in T_obs[-1]], axis=0)
     
     DatasetClass = sel_dataset_class(prediction_task=res['prediction_task'],N_trials=1)
     dg_train = DatasetClass(data=out, J=J, offset=res['lead_time'], normalize=res['normalize_data'], 
                        start=int(res['spin_up_time']/dt), 
                        end=int(np.floor(out.shape[0]*res['train_frac'])))
-    
-    res['targets_obs'] = model_observer.sample(as_tensor(res['targets'])) # sets the loss masks!
+
+    # ## Generate observed data: (sub-)sample noisy observations
+    res['targets_obs'] = gen._sample_obs(as_tensor(res['targets'])) # sets the loss masks!
     res['targets_obs'] = sortL96fromChannels(res['targets_obs'].detach().cpu().numpy())
-    res['loss_mask'] = model_observer.mask.detach().cpu().numpy()
+    res['loss_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
+
+    print('mask . shape', res['loss_mask'].shape)
+    print('target . shape', res['targets'].shape)
+    print('targets_obs . shape', res['targets_obs'].shape)
     
     print('\n')
     print('storing intermediate results')
     print('\n')
     np.save(res_dir + fn, arr=res)
 
-    
-    # ### define prior over initial states
-
-    prior = torch.distributions.normal.Normal(loc=torch.zeros((1,J+1,K)), 
-                                              scale=1.*torch.ones((1,J+1,K)))
-
 
     # ### define setup for optimization
 
     T_rollouts = np.arange(1, n_chunks+1) * (T_rollout//n_chunks)
-    T_obs = [[t - 1] for t in T_rollouts]
     grndtrths = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)] for j in range(n_chunks)]
     targets = [1.*res['targets_obs'] for i in range(n_chunks)]
-    loss_masks = [1.*as_tensor(res['loss_mask']) for i in range(n_chunks)]
+    loss_masks = [torch.stack(gen.masks,dim=0) for i in range(n_chunks)]
     
     T_rollouts_chunks = np.arange(1, n_chunks_recursive+1) * (T_rollout//n_chunks_recursive)
-    T_obs_chunks = [[t - 1] for t in T_rollouts_chunks]
     grndtrths_chunks = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks_recursive)] for j in range(n_chunks_recursive)]
 
 
@@ -422,22 +476,20 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
                 x = model_forwarder_eb.forward(x)
             return x.detach().cpu().numpy()
 
-        x_init = get_init(res['targets_obs'], res['loss_mask'], method='interpolation')
+        x_init = get_init(sortL96intoChannels(res['targets_obs'],J=J)[0], res['loss_mask'][0], method='interpolate')
         x_inits[0] = exp_bs(x_init)
 
         opt_res = optim_initial_state(
-            model_forwarder=model_forwarder,
-            model_observer=model_observer,
-            prior=prior,
+            gen,
             T_rollouts=T_rollouts_chunks,
-            T_obs=T_obs_chunks,
+            T_obs=list(np.repeat(T_obs, recursions_per_chunks)),
             N=N,
             n_chunks=n_chunks_recursive,
             optimizer_pars=optimizer_pars,
             x_inits=x_inits,
             targets=[1.*res['targets_obs'] for i in range(n_chunks_recursive)],
             grndtrths=grndtrths_chunks,
-            loss_masks=[1.*as_tensor(res['loss_mask']) for i in range(n_chunks_recursive)],
+            loss_masks=[torch.stack(gen.masks,dim=0) for i in range(n_chunks_recursive)],
             f_init=exp_bs)
 
         res['x_sols_LBFGS_recurse_chunks'] = opt_res[0]
@@ -459,21 +511,19 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         print('\n')
 
         x_inits = [None for i in range(n_chunks_recursive)]
-        x_inits[0] = get_init(res['targets_obs'], obs_mask = res['loss_mask'], method='interpolation')
-                                    )
+        x_inits[0] = get_init(sortL96intoChannels(res['targets_obs'],J=J)[0], res['loss_mask'][0], method='interpolate')
+
         opt_res = optim_initial_state(
-            model_forwarder=model_forwarder,
-            model_observer=model_observer,
-            prior=prior,
+            gen,
             T_rollouts=np.ones(n_chunks_recursive, dtype=np.int) * (T_rollout//n_chunks_recursive),
-            T_obs=[[(T_rollout//n_chunks_recursive) - 1] for t in T_rollouts_chunks],
+            T_obs=list(np.repeat(T_obs, recursions_per_chunks)),
             N=N,
             n_chunks=n_chunks_recursive,
             optimizer_pars=optimizer_pars,
             x_inits=x_inits,
             targets=[1.*res['targets_obs']] + [None for i in range(n_chunks_recursive-1)],
             grndtrths=grndtrths_chunks,
-            loss_masks=[1.*as_tensor(res['loss_mask'])] + [torch.ones((N,J+1,K)) for i in range(n_chunks_recursive-1)])
+            loss_masks=[torch.stack(gen.masks,dim=0)] + [torch.ones((N,J+1,K)) for i in range(n_chunks_recursive-1)])
 
         res['x_sols_LBFGS_chunks'] = opt_res[0]
         res['loss_vals_LBFGS_chunks'] = opt_res[1]
@@ -498,9 +548,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_inits]
 
         opt_res = optim_initial_state(
-            model_forwarder=model_forwarder,
-            model_observer=model_observer,
-            prior=prior,
+            gen,
             T_rollouts=T_rollouts,
             T_obs=T_obs,
             N=N,
@@ -541,9 +589,9 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
                                         res['back_solve_dt_fac'] * T_rollouts_chunks[j]+1)
             print('backward solving')
             res['time_vals_backsolve'][j] = time.time()
-            x_init = get_init(res['targets_obs'], obs_mask = res['loss_mask'], method='interpolation')
+            x_init = get_init(sortL96intoChannels(res['targets_obs'],J=J)[0], res['loss_mask'][0], method='interpolate')
 
-            res['x_sols_backsolve'][j] = explicit_backsolve(x_init, times_eb, fun_eb)
+            res['x_sols_backsolve'][j] = explicit_backsolve(sortL96fromChannels(x_init), times_eb, fun_eb)
 
             res['time_vals_backsolve'][j] = time.time() - res['time_vals_backsolve'][j]
             res['state_mses_backsolve'][j] = ((res['x_sols_backsolve'][j] - grndtrths_chunks[j])**2).mean(axis=1)
@@ -566,9 +614,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         x_inits = [sortL96intoChannels(z,J=J).copy() for z in x_inits]
 
         opt_res = optim_initial_state(
-            model_forwarder=model_forwarder,
-            model_observer=model_observer,
-            prior=prior,
+            gen,
             T_rollouts=T_rollouts,
             T_obs=T_obs,
             N=N,
@@ -599,13 +645,11 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         print('L-BFGS, solve across full rollout time in one go')
         print('\n')
 
-        x_init = get_init(res['targets_obs'], obs_mask = res['loss_mask'], method='interpolation')
+        x_init = get_init(sortL96intoChannels(res['targets_obs'],J=J)[0], res['loss_mask'][0], method='interpolate')
         x_inits = [x_init for j in range(n_chunks)]
 
         opt_res = optim_initial_state(
-            model_forwarder=model_forwarder,
-            model_observer=model_observer,
-            prior=prior,
+            gen,
             T_rollouts=T_rollouts,
             T_obs=T_obs,
             N=N,
@@ -698,7 +742,7 @@ def get_init(x_init, obs_mask=None, method='interpolate'):
         for n in range(N):
             for j in range(J+1):
                 mask_nj = np.where(obs_mask[n][j]>0.)[0]
-                x_p[n,j] = np.interp(K_range, mask_nj, x_obs[n, j, mask_nj], period=K)
+                x_p[n,j] = np.interp(K_range, mask_nj, x_init[n, j, mask_nj], period=K)
 
     else: 
         raise NotImplementedError()
