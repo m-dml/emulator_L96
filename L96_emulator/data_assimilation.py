@@ -647,7 +647,10 @@ def get_model(model_pars, res_dir, exp_dir=''):
             seq_length=1,
             **args
         )
-        args['conf_exp'] = '00_analyticalMinimalConvNet'
+        if model_pars['J_net'] > 0:
+            args['conf_exp'] = '00_analyticalMinimalConvNet'
+        else:
+            args['conf_exp'] = '00_analyticalMinimalConvNet_oneLevel'
     else:
 
         exp_names = os.listdir(exp_dir + 'experiments/')
