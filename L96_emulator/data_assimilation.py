@@ -422,7 +422,8 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
                 x = model_forwarder_eb.forward(x)
             return x.detach().cpu().numpy()
 
-        x_inits[0] = exp_bs(sortL96intoChannels(res['targets_obs'], J=J))
+        x_init = get_init(res['targets_obs'], res['loss_mask'], method='interpolation')
+        x_inits[0] = exp_bs(x_init)
 
         opt_res = optim_initial_state(
             model_forwarder=model_forwarder,
@@ -458,8 +459,8 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         print('\n')
 
         x_inits = [None for i in range(n_chunks_recursive)]
-        x_inits[0] = 1. * res['targets']
-
+        x_inits[0] = get_init(res['targets_obs'], obs_mask = res['loss_mask'], method='interpolation')
+                                    )
         opt_res = optim_initial_state(
             model_forwarder=model_forwarder,
             model_observer=model_observer,
@@ -535,13 +536,14 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         res['loss_vals_backsolve'] = np.zeros((n_chunks_recursive, len(n_starts)))
 
         for j in range(n_chunks_recursive):
-            times_eb = dt * np.linspace(0, 
-                                        T_rollouts_chunks[j], 
-                                        res['back_solve_dt_fac'] * T_rollouts_chunks[j]+1) 
+            times_eb = dt * np.linspace(0,
+                                        T_rollouts_chunks[j],
+                                        res['back_solve_dt_fac'] * T_rollouts_chunks[j]+1)
             print('backward solving')
             res['time_vals_backsolve'][j] = time.time()
+            x_init = get_init(res['targets_obs'], obs_mask = res['loss_mask'], method='interpolation')
 
-            res['x_sols_backsolve'][j] = explicit_backsolve(res['targets_obs'], times_eb, fun_eb)
+            res['x_sols_backsolve'][j] = explicit_backsolve(x_init, times_eb, fun_eb)
 
             res['time_vals_backsolve'][j] = time.time() - res['time_vals_backsolve'][j]
             res['state_mses_backsolve'][j] = ((res['x_sols_backsolve'][j] - grndtrths_chunks[j])**2).mean(axis=1)
@@ -597,7 +599,8 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         print('L-BFGS, solve across full rollout time in one go')
         print('\n')
 
-        x_inits = [1. * res['targets'] for j in range(n_chunks)]
+        x_init = get_init(res['targets_obs'], obs_mask = res['loss_mask'], method='interpolation')
+        x_inits = [x_init for j in range(n_chunks)]
 
         opt_res = optim_initial_state(
             model_forwarder=model_forwarder,
@@ -675,3 +678,29 @@ def get_model(model_pars, res_dir, exp_dir=''):
         p.requires_grad = False
 
     return model, model_forwarder, args
+
+
+def get_init(x_init, obs_mask=None, method='interpolate'):
+
+    N, J, K = x_init.shape
+    J -= 1
+
+    obs_mask = 1.*(x_init==0.) if obs_mask is None else obs_mask
+
+    assert x_init.shape == obs_mask.shape
+    assert J == 0
+
+    x_p = np.zeros_like(x_init)
+
+    if method == 'interpolate':
+
+        K_range = np.arange(K)
+        for n in range(N):
+            for j in range(J+1):
+                mask_nj = np.where(obs_mask[n][j]>0.)[0]
+                x_p[n,j] = np.interp(K_range, mask_nj, x_obs[n, j, mask_nj], period=K)
+
+    else: 
+        raise NotImplementedError()
+
+    return x_p
