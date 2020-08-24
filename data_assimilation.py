@@ -37,8 +37,8 @@ system_pars = {
     'h' : 1.,
     'b' : 10.,
     'c' : 10.,
-    'obs_operator' : ObsOp_identity, #ObsOp_identity, #ObsOp_subsampleGaussian,
-    'obs_operator_args' : {} #{'r' : 0.0, 'sigma2' : 1.0} #{} #{'r' : 0.5, 'sigma2' : 1.0}
+    'obs_operator' : ObsOp_subsampleGaussian, #ObsOp_identity, #ObsOp_subsampleGaussian,
+    'obs_operator_args' : {'r' : 0.25, 'sigma2' : 0.1 } #{'r' : 0.0, 'sigma2' : 1.0} #{} #{'r' : 0.5, 'sigma2' : 1.0}
 }
 
 setup_pars = {
@@ -53,7 +53,7 @@ setup_pars = {
 }
 
 model_pars = {
-    'exp_id' : 24,
+    'exp_id' : None,
     'model_forwarder' : 'rk4_default',
     'K_net' : system_pars['K'],
     'J_net' : system_pars['J'],
@@ -66,8 +66,8 @@ optimizer_pars = {
               'lr' : 1e0,
               'max_iter' : 1000,
               'max_eval' : None,
-              'tolerance_grad' : 1e-07,
-              'tolerance_change' : 1e-09,
+              'tolerance_grad' : 1e-12,
+              'tolerance_change' : 1e-12,
               'history_size': 10
 }
 
