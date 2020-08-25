@@ -210,6 +210,7 @@ def optim_initial_state(
 
         target = sortL96intoChannels(as_tensor(targets[j]),J=J)
         loss_mask = loss_masks[j]
+        assert len(target) == len(T_obs[j]) and len(loss_mask) == len(T_obs[j])
 
         for n in range(N):
 
@@ -233,7 +234,7 @@ def optim_initial_state(
             for i_n in range(n_steps):
 
                 with torch.no_grad():
-                    loss = - gen.log_prob(y=target[:len(T_obs[j]),n:n+1], m=loss_mask[:len(T_obs[j]),n:n+1], T_obs=T_obs[j])
+                    loss = - gen.log_prob(y=target[:,n:n+1], m=loss_mask[:,n:n+1], T_obs=T_obs[j])
                     if torch.any(torch.isnan(loss)):
                         loss_vals[i_n,n] = loss.detach().cpu().numpy()
                         time_vals[i_+i_n,n] = time.time() - time_vals[i_+i_n,n]
@@ -242,7 +243,7 @@ def optim_initial_state(
                         continue
 
                 def closure():
-                    loss = - gen.log_prob(y=target[:len(T_obs[j]),n:n+1], m=loss_mask[:len(T_obs[j]),n:n+1], T_obs=T_obs[j])
+                    loss = - gen.log_prob(y=target[:,n:n+1], m=loss_mask[:,n:n+1], T_obs=T_obs[j])
                     optimizer.zero_grad()
                     loss.backward()
                     return loss
@@ -264,15 +265,6 @@ def optim_initial_state(
         with torch.no_grad():  
             print('Eucl. distance to initial value', mse_loss_fullyObs(x_sols[j], grndtrths[j]))
             print('Eucl. distance to x_init', mse_loss_fullyObs(x_sols[j], sortL96fromChannels(x_inits[j])))
-            try:
-                if loss_masks[j] is None:
-                    print('Eucl. distance to target', mse_loss_fullyObs(x_sols[j], targets[j]))
-                else:
-                    print('Eucl. distance to target', mse_loss_masked(x_sols[j], 
-                                                                targets[j],
-                                                                sortL96fromChannels(loss_masks[j]).detach().cpu().numpy()))
-            except:
-                pass
 
         if j < n_chunks - 1 and x_inits[j+1] is None:
             x_inits[j+1] = sortL96intoChannels(x_sols[j], J=J).copy()
@@ -327,18 +319,17 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     # ### instantiate observation operator
     model_observer = system_pars['obs_operator'](**system_pars['obs_operator_args'])
 
-    
     # ### define prior over initial states
     prior = torch.distributions.normal.Normal(loc=torch.zeros((1,J+1,K)), 
                                               scale=1.*torch.ones((1,J+1,K)))
 
-    
     # ### define generative model for observed data
     gen = GenModel(model_forwarder, model_observer, prior, T=T_rollout, x_init=None)
-    
+
     # prepare function output
     model_forwarder_str, optimizer_str = args['model_forwarder'], optimizer_pars['optimizer']
-    exp_id, obs_operator_str = model_pars['exp_id'], model_observer.__class__.__name__
+    obs_operator_str = model_observer.__class__.__name__
+    exp_id = model_pars['exp_id']
     fn = 'results/data_assimilation/fullyobs_initstate_tests_'
     fn = fn + f'exp{exp_id}_{model_forwarder_str}_{optimizer_str}_{obs_operator_str}'
 
@@ -425,20 +416,11 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     print('T_obs[-1]', T_obs[-1])
     res['targets'] = np.stack([sortL96intoChannels(out[n_starts+t+1], J=J) for t in T_obs[-1]], axis=0)
     
-    DatasetClass = sel_dataset_class(prediction_task=res['prediction_task'],N_trials=1)
-    dg_train = DatasetClass(data=out, J=J, offset=res['lead_time'], normalize=res['normalize_data'], 
-                       start=int(res['spin_up_time']/dt), 
-                       end=int(np.floor(out.shape[0]*res['train_frac'])))
-
     # ## Generate observed data: (sub-)sample noisy observations
     res['targets_obs'] = gen._sample_obs(as_tensor(res['targets'])) # sets the loss masks!
     res['targets_obs'] = sortL96fromChannels(res['targets_obs'].detach().cpu().numpy())
     res['loss_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
 
-    print('mask . shape', res['loss_mask'].shape)
-    print('target . shape', res['targets'].shape)
-    print('targets_obs . shape', res['targets_obs'].shape)
-    
     print('\n')
     print('storing intermediate results')
     print('\n')
@@ -449,8 +431,8 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
 
     T_rollouts = np.arange(1, n_chunks+1) * (T_rollout//n_chunks)
     grndtrths = [out[n_starts] for j in range(n_chunks)]
-    targets = [1.*res['targets_obs'][:n_chunks] for i in range(n_chunks)]
-    loss_masks = [torch.stack(gen.masks[:n_chunks],dim=0) for i in range(n_chunks)]
+    targets = [res['targets_obs'][:len(T_obs[j])] for j in range(n_chunks)]
+    loss_masks = [torch.stack(gen.masks[:len(T_obs[j])],dim=0) for j in range(n_chunks)]
     
     T_rollouts_chunks = np.arange(1, n_chunks_recursive+1) * (T_rollout//n_chunks_recursive)
     grndtrths_chunks = [out[n_starts] for j in range(n_chunks_recursive)]
@@ -469,17 +451,17 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
                                     T_rollout//n_chunks_recursive, 
                                     res['back_solve_dt_fac'] * (T_rollout//n_chunks_recursive)+1)
 
-        #def exp_bs(x_init): # numpy decorator
-        #    return explicit_backsolve(x_init, times_eb=times_eb, fun_eb=fun_eb)
-
         def exp_bs(x_init): # torch decorator
             x = as_tensor(x_init)
-            for t in range(res['back_solve_dt_fac'] *(T_rollout//n_chunks_recursive)):
+            for t in range(res['back_solve_dt_fac'] *T_rollouts[0]):
                 x = model_forwarder_eb.forward(x)
             return x.detach().cpu().numpy()
 
-        x_init = get_init(sortL96intoChannels(res['targets_obs'],J=J)[0], res['loss_mask'][0], method='interpolate')
-        x_inits[0] = exp_bs(x_init)
+        x_init = get_init(sortL96intoChannels(res['targets_obs'],J=J)[0], 
+                          res['loss_mask'][0], 
+                          method='interpolate')
+        x_init = exp_bs(x_init)
+        x_inits = [x_init for j in range(n_chunks)]
 
         opt_res = optim_initial_state(
             gen,
@@ -489,10 +471,9 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
             n_chunks=n_chunks_recursive,
             optimizer_pars=optimizer_pars,
             x_inits=x_inits,
-            targets=[1.*res['targets_obs'] for i in range(n_chunks_recursive)],
+            targets=list(np.repeat(targets, recursions_per_chunks, axis=0)),
             grndtrths=grndtrths_chunks,
-            loss_masks=[torch.stack(gen.masks,dim=0) for i in range(n_chunks_recursive)],
-            f_init=exp_bs)
+            loss_masks=list(np.repeat(loss_masks, recursions_per_chunks, axis=0)))
 
         res['x_sols_LBFGS_recurse_chunks'] = opt_res[0]
         res['loss_vals_LBFGS_recurse_chunks'] = opt_res[1]
@@ -523,7 +504,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
             n_chunks=n_chunks_recursive,
             optimizer_pars=optimizer_pars,
             x_inits=x_inits,
-            targets=[1.*res['targets_obs']] + [None for i in range(n_chunks_recursive-1)],
+            targets=[res['targets_obs'][:len(T_obs[0])]] + [None for i in range(n_chunks_recursive-1)],
             grndtrths=grndtrths_chunks,
             loss_masks=[torch.stack(gen.masks,dim=0)] + [torch.ones((N,J+1,K)) for i in range(n_chunks_recursive-1)])
 
@@ -733,7 +714,7 @@ def get_init(x_init, obs_mask=None, method='interpolate'):
     obs_mask = 1.*(x_init==0.) if obs_mask is None else obs_mask
 
     assert x_init.shape == obs_mask.shape
-    assert J == 0
+    #assert J == 0
 
     x_p = np.zeros_like(x_init)
 
