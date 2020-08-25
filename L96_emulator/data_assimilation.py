@@ -416,7 +416,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
                                  resimulate=True, solver=rk4_default,
                                  save_sim=False, data_dir=data_dir)
 
-    grndtrths = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks_recursive)] for j in range(n_chunks_recursive)]
+    grndtrths = [out[n_starts] for j in range(n_chunks_recursive)]
     res['initial_states'] = np.stack([sortL96intoChannels(z,J=J) for z in grndtrths])
 
     T_obs = [[(j+1)*(T_rollout//n_chunks)-1 for j in range(n_+1)] for n_ in range(n_chunks)]
@@ -446,12 +446,12 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     # ### define setup for optimization
 
     T_rollouts = np.arange(1, n_chunks+1) * (T_rollout//n_chunks)
-    grndtrths = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks)] for j in range(n_chunks)]
-    targets = [1.*res['targets_obs'] for i in range(n_chunks)]
-    loss_masks = [torch.stack(gen.masks,dim=0) for i in range(n_chunks)]
+    grndtrths = [out[n_starts] for j in range(n_chunks)]
+    targets = [1.*res['targets_obs'][:n_chunks] for i in range(n_chunks)]
+    loss_masks = [torch.stack(gen.masks[:n_chunks],dim=0) for i in range(n_chunks)]
     
     T_rollouts_chunks = np.arange(1, n_chunks_recursive+1) * (T_rollout//n_chunks_recursive)
-    grndtrths_chunks = [out[n_starts+T_rollout-(j+1)*(T_rollout//n_chunks_recursive)] for j in range(n_chunks_recursive)]
+    grndtrths_chunks = [out[n_starts] for j in range(n_chunks_recursive)]
 
 
     # ## L-BFGS, solve across full rollout time recursively, initialize from forward solver in reverse
@@ -583,17 +583,16 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         res['x_sols_backsolve'] = np.zeros((n_chunks_recursive, len(n_starts), K*(J+1)))
         res['loss_vals_backsolve'] = np.zeros((n_chunks_recursive, len(n_starts)))
 
+        times_eb = dt * np.linspace(0, T_rollouts[0], res['back_solve_dt_fac'] * T_rollouts[0]+1)
+        print('backward solving')
+        res['time_vals_backsolve'][0] = time.time()
+        x_init = get_init(sortL96intoChannels(res['targets_obs'][0],J=J), res['loss_mask'][0], method='interpolate')
+        res['x_sols_backsolve'][0] = explicit_backsolve(sortL96fromChannels(x_init), times_eb, fun_eb)
+        res['time_vals_backsolve'][0] = time.time() - res['time_vals_backsolve'][0]
+
         for j in range(n_chunks_recursive):
-            times_eb = dt * np.linspace(0,
-                                        T_rollouts_chunks[j],
-                                        res['back_solve_dt_fac'] * T_rollouts_chunks[j]+1)
-            print('backward solving')
-            res['time_vals_backsolve'][j] = time.time()
-            x_init = get_init(sortL96intoChannels(res['targets_obs'],J=J)[0], res['loss_mask'][0], method='interpolate')
-
-            res['x_sols_backsolve'][j] = explicit_backsolve(sortL96fromChannels(x_init), times_eb, fun_eb)
-
-            res['time_vals_backsolve'][j] = time.time() - res['time_vals_backsolve'][j]
+            res['x_sols_backsolve'][j] = res['x_sols_backsolve'][0]
+            res['time_vals_backsolve'][j] = res['time_vals_backsolve'][0]
             res['state_mses_backsolve'][j] = ((res['x_sols_backsolve'][j] - grndtrths_chunks[j])**2).mean(axis=1)
 
         print('\n')
