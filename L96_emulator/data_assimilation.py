@@ -237,7 +237,7 @@ def optim_initial_state(
                     if torch.any(torch.isnan(loss)):
                         loss_vals[i_n,n] = loss.detach().cpu().numpy()
                         time_vals[i_+i_n,n] = time.time() - time_vals[i_+i_n,n]
-                        print((time_vals[i_n,n], loss_vals[i_n,n]))
+                        print(('{:.4f}'.format(time_vals[i_n,n]), loss_vals[i_n,n]))
                         print('NaN loss - skipping iteration')
                         continue
 
@@ -249,7 +249,7 @@ def optim_initial_state(
                 optimizer.step(closure)
                 loss_vals[i_+i_n,n] = loss.detach().cpu().numpy()
                 time_vals[i_+i_n,n] = time.time() - time_vals[i_+i_n,n]
-                print((time_vals[i_n,n], loss_vals[i_n,n]))
+                print(('{:.4f}'.format(time_vals[i_n,n]), loss_vals[i_n,n]))
             
 
             x_sols[j][n] = sortL96fromChannels(gen.X.detach().cpu().numpy().copy())
