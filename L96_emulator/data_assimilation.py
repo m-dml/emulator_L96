@@ -83,9 +83,9 @@ class ObsOp_subsampleGaussian(ObsOp_identity):
         x = x.reshape(1, *x.shape) if len(x.shape)==2 else x
         if m is None:
             m = self.mask
-        m = m.reshape(1, *m.shape) if len(m.shape)==2 else x
-        assert y.shape[1:] == m.shape[1:] and x.shape[1:] == y.shape[1:]
+        m = m.reshape(1, *m.shape) if len(m.shape)==2 else m
 
+        assert y.shape[1:] == m.shape[1:] and x.shape[1:] == y.shape[1:]
         return (m * self.ndistr.log_prob(x - y)).sum(axis=(-2,-1)) # sum from iid over dims
 
 
@@ -234,9 +234,11 @@ def optim_initial_state(
 
                 with torch.no_grad():
                     loss = - gen.log_prob(y=target[:len(T_obs[j]),n:n+1], m=loss_mask[:len(T_obs[j]),n:n+1], T_obs=T_obs[j])
-                    if torch.isnan(loss):
+                    if torch.any(torch.isnan(loss)):
                         loss_vals[i_n,n] = loss.detach().cpu().numpy()
                         time_vals[i_+i_n,n] = time.time() - time_vals[i_+i_n,n]
+                        print((time_vals[i_n,n], loss_vals[i_n,n]))
+                        print('NaN loss - skipping iteration')
                         continue
 
                 def closure():
