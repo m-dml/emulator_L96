@@ -83,16 +83,26 @@ def optim_initial_state(
             for i_n in range(n_steps):
 
                 with torch.no_grad():
-                    loss = - gen.log_prob(y=target[:,n:n+1], m=loss_mask[:,n:n+1], T_obs=T_obs[j])
+                    loss = - gen.log_prob(y=target[:,n:n+1],
+                                          m=loss_mask[:,n:n+1],
+                                          T_obs=T_obs[j])
+
+                    if i_ == 0:
+                        print('initial loss: ', loss)
                     if torch.any(torch.isnan(loss)):
                         loss_vals[i_n,n] = loss.detach().cpu().numpy()
                         time_vals[i_+i_n,n] = time.time() - time_vals[i_+i_n,n]
                         print(('{:.4f}'.format(time_vals[i_n,n]), loss_vals[i_n,n]))
                         print('NaN loss - skipping iteration')
+
+                        print('optimizier.state', optimizer.state[gen.X])
+
                         continue
 
                 def closure():
-                    loss = - gen.log_prob(y=target[:,n:n+1], m=loss_mask[:,n:n+1], T_obs=T_obs[j])
+                    loss = - gen.log_prob(y=target[:,n:n+1],
+                                          m=loss_mask[:,n:n+1],
+                                          T_obs=T_obs[j])
                     if torch.is_grad_enabled():
                         optimizer.zero_grad()
                     if loss.requires_grad:
@@ -103,7 +113,6 @@ def optim_initial_state(
                 loss_vals[i_+i_n,n] = loss.detach().cpu().numpy()
                 time_vals[i_+i_n,n] = time.time() - time_vals[i_+i_n,n]
                 print(('{:.4f}'.format(time_vals[i_n,n]), loss_vals[i_n,n]))
-            
 
             x_sols[j][n] = sortL96fromChannels(gen.X.detach().cpu().numpy().copy())
             state_mses[j][n] = ((x_sols[j][n] - grndtrths[j][n])**2).mean()
