@@ -1,6 +1,6 @@
-from .util import sortL96fromChannels, sortL96intoChannels, predictor_corrector, device, dtype
-from .dataset import Dataset, DatasetRelPred, DatasetRelPredPast
-from .networks import named_network
+from L96_emulator.util import sortL96fromChannels, sortL96intoChannels, device, dtype, as_tensor
+from L96_emulator.dataset import Dataset, DatasetRelPred, DatasetRelPredPast
+from L96_emulator.networks import named_network
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,7 +21,7 @@ class Rollout(torch.nn.Module):
 
         x_init = np.random.normal(size=(N,K*(J+1))) if x_init is None else x_init
         assert x_init.ndim in [2,3]
-        self.X = torch.nn.Parameter(torch.as_tensor(x_init, device=device, dtype=dtype))
+        self.X = torch.nn.Parameter(as_tensor(x_init))
 
     def forward(self):
 
@@ -62,7 +62,7 @@ def load_model_from_exp_conf(res_dir, conf):
 
     test_input = np.random.normal(size=(10, conf['seq_length']*(conf['J']+1), conf['K']))
     print(f'model output shape to test input of shape {test_input.shape}', 
-          model.forward(torch.as_tensor(test_input, device=device, dtype=dtype)).shape)
+          model.forward(as_tensor(test_input)).shape)
 
     print('total #parameters: ', np.sum([np.prod(item.shape) for item in model.state_dict().values()]))
 
@@ -89,14 +89,14 @@ def get_rollout_fun(dg_train, model_forward, prediction_task):
         raise NotImplementedError
 
         assert isinstance(dg_train, DatasetRelPredPast)
-        std_out = torch.as_tensor(dg_train.std_out, device=device, dtype=dtype)
-        mean_out = torch.as_tensor(dg_train.mean_out, device=device, dtype=dtype)
+        std_out = as_tensor(dg_train.std_out)
+        mean_out = as_tensor(dg_train.mean_out)
 
         def model_simulate(y0, dy0, n_steps):
             x = np.empty((n_steps+1, *y0.shape[1:]))
             x[0] = y0.copy()
-            xx = torch.as_tensor(x[0], device=device, dtype=dtype)
-            dx = torch.as_tensor(dy0.copy(), device=device, dtype=dtype)
+            xx = as_tensor(x[0])
+            dx = as_tensor(dy0.copy())
             for i in range(1,n_steps+1):
                 xxo = xx * 1.
                 xx = std_out * model_forward(torch.cat((xx.reshape(1,J+1,K), dx), axis=1)) + mean_out + xx.reshape(1,J+1,-1)
@@ -112,7 +112,7 @@ def get_rollout_fun(dg_train, model_forward, prediction_task):
         def model_simulate(y0, dy0, n_steps):
             x = np.empty((n_steps+1, *y0.shape[1:]))
             x[0] = y0.copy()
-            xx = torch.as_tensor(x[0], device=device, dtype=dtype).reshape(1,1,-1)
+            xx = as_tensor(x[0]).reshape(1,1,-1)
             for i in range(1,n_steps+1):
                 xx = model_forward(xx.reshape(1,J+1,-1)) + xx.reshape(1,J+1,-1)
                 x[i] = xx.detach().cpu().numpy().copy()
@@ -124,7 +124,7 @@ def get_rollout_fun(dg_train, model_forward, prediction_task):
         def model_simulate(y0, dy0, n_steps):
             x = np.empty((n_steps+1, *y0.shape[1:]))
             x[0] = y0.copy()
-            xx = torch.as_tensor(x[0], device=device, dtype=dtype).reshape(1,1,-1)
+            xx = as_tensor(x[0]).reshape(1,1,-1)
             for i in range(1,n_steps+1):
                 xx = model_forward(xx.reshape(1,J+1,-1))
                 x[i] = xx.detach().cpu().numpy().copy()

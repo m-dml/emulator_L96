@@ -17,7 +17,6 @@
 
 import numpy as np
 
-from L96_emulator.util import dtype, dtype_np, device
 from L96_emulator.data_assimilation import solve_initstate, ObsOp_subsampleGaussian, ObsOp_identity
 
 res_dir = '/gpfs/work/nonnenma/results/emulators/L96/'
@@ -38,7 +37,7 @@ system_pars = {
     'b' : 10.,
     'c' : 10.,
     'obs_operator' : ObsOp_subsampleGaussian, #ObsOp_identity, #ObsOp_subsampleGaussian,
-    'obs_operator_args' : {'r' : 0.5, 'sigma2' : 1.0} #{'r' : 0.5, 'sigma2' : 1.0}  #{} #{'r' : 0.5, 'sigma2' : 1.0}
+    'obs_operator_args' : {'r' : 0.5, 'sigma2' : 0.01} #{'r' : 0.5, 'sigma2' : 1.0}  #{} #{'r' : 0.5, 'sigma2' : 1.0}
 }
 
 setup_pars = {

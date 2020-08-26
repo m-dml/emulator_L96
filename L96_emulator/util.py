@@ -15,6 +15,9 @@ def init_torch_device():
 
 device, dtype, dtype_np = init_torch_device(), torch.float32, np.float32
 
+def as_tensor(x):
+    return torch.as_tensor(x, dtype=dtype, device=device)
+
 def sortL96intoChannels(x, J):
 
     shape = x.shape

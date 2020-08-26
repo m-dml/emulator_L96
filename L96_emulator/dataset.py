@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from .util import sortL96intoChannels
+from L96_emulator.util import sortL96intoChannels
 
 class Dataset(torch.utils.data.IterableDataset):
     def __init__(self, data, offset=1, J=0,

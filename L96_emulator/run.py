@@ -1,9 +1,9 @@
 import numpy as np
 import torch
-from .util import init_torch_device
-from .networks import named_network
-from .dataset import Dataset, DatasetMultiTrial, DatasetRelPred, DatasetRelPredPast
-from .train import train_model, loss_function
+from L96_emulator.util import init_torch_device, device, as_tensor
+from L96_emulator.networks import named_network
+from L96_emulator.dataset import Dataset, DatasetMultiTrial, DatasetRelPred, DatasetRelPredPast
+from L96_emulator.train import train_model, loss_function
 from configargparse import ArgParser
 import ast
 import subprocess
@@ -30,9 +30,6 @@ def run_exp(exp_id, datadir, res_dir,
             prediction_task, lead_time, seq_length, train_frac, validation_frac, spin_up_time,            
             model_name, loss_fun, weight_decay, batch_size, max_epochs, eval_every, max_patience,
             lr, lr_min, lr_decay, max_lr_patience, only_eval, normalize_data, **net_kwargs):
-
-    device = init_torch_device()
-    dtype=torch.float32
 
     fetch_commit = subprocess.Popen(['git', 'rev-parse', 'HEAD'], shell=False, stdout=subprocess.PIPE)
     commit_id = fetch_commit.communicate()[0].strip().decode("utf-8")
@@ -82,7 +79,7 @@ def run_exp(exp_id, datadir, res_dir,
 
     test_input = np.random.normal(size=(10, seq_length*(J+1), K))
     print(f'model output shape to test input of shape {test_input.shape}', 
-          model_forward(torch.as_tensor(test_input, device=device, dtype=dtype)).shape)
+          model_forward(as_tensor(test_input)).shape)
     print('total #parameters: ', np.sum([np.prod(item.shape) for item in model.state_dict().values()]))
 
     ## train model

@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-from .util import device, dtype, dtype_np
+from .util import device, dtype, dtype_np, as_tensor
 
 def _pointwise_square(x):
     return x**2
@@ -574,7 +574,7 @@ class MinimalNetL96(torch.nn.Module):
                 model_np = AnalyticModel_oneLevel(K=K, 
                                                   skip_conn=skip_conn)
             def get_param(p):
-                p = torch.as_tensor(p, device=device, dtype=dtype)
+                p = as_tensor(p)
                 return torch.nn.Parameter(p)
 
             self.layer1.weight = get_param(model_np.W1)
@@ -700,7 +700,7 @@ class MinimalConvNetL96(torch.nn.Module):
             else: 
                 model_np = AnalyticConvModel_oneLevel(K=K)
             def get_param(p):
-                p = torch.as_tensor(p, device=device, dtype=dtype)
+                p = as_tensor(p)
                 return torch.nn.Parameter(p)
 
             self.layer1.weight = get_param(model_np.W1)
