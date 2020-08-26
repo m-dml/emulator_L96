@@ -29,9 +29,15 @@ class ObsOp_identity(torch.nn.Module):
     def log_prob(self, y, x, m=None):
         """ log p(y|x, m)  """
         assert len(y.shape) == 3 # N x J+1 x K
+
+        x = x.reshape(1, *x.shape) if len(x.shape)==2 else x
+        assert x.shape[1:] == y.shape[1:]
+
         if m is None:
             return self.ndistr.log_prob(x - y).sum() # sum from iid over dims
-        assert y.shape == m.shape and x.shape == y.shape
+
+        m = m.reshape(1, *m.shape) if len(m.shape)==2 else m
+        assert m.shape[1:] == y.shape[1:]
         return (m * self.ndistr.log_prob(x - y)).sum(axis=(-2,-1)) # sum from iid over dims
 
 
