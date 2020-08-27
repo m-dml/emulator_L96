@@ -37,16 +37,16 @@ system_pars = {
     'b' : 10.,
     'c' : 10.,
     'obs_operator' : ObsOp_subsampleGaussian, #ObsOp_identity, #ObsOp_subsampleGaussian,
-    'obs_operator_args' : {'r' : 0.5, 'sigma2' : 0.01} #{'r' : 0.5, 'sigma2' : 1.0}  #{} #{'r' : 0.5, 'sigma2' : 1.0}
+    'obs_operator_args' : {'r' : 0.5, 'sigma2' : 1.0} #{'r' : 0.5, 'sigma2' : 1.0}  #{} 
 }
 
 setup_pars = {
     'n_starts' : np.arange(int(system_pars['spin_up_time']/system_pars['dt']),
                            int(system_pars['train_frac']*system_pars['T']/system_pars['dt']),
-                           8*3* int(system_pars['spin_up_time']/system_pars['dt'])),
-    'T_rollout' : 40,          # number of rollout steps (by model_forwarder, e.g. RK4 step)
-    'n_chunks' : 8,            # number of intermediate chunks to try solving for initial state
-    'n_chunks_recursive' : 40, # for recursive methods (such as solving forward in reverse), can give more chunks
+                           8*4* int(system_pars['spin_up_time']/system_pars['dt'])),
+    'T_rollout' : 20,          # number of rollout steps (by model_forwarder, e.g. RK4 step)
+    'n_chunks' : 20,           # number of intermediate chunks to try solving for initial state
+    'n_chunks_recursive' : 20, # for recursive methods (such as solving forward in reverse), can give more chunks
     'prediction_task' : 'state',
     'lead_time' : 1
 }
@@ -73,8 +73,8 @@ optimizer_pars = {
 optimiziation_schemes = {
     'LBFGS_chunks' : False,
     'LBFGS_full_chunks' : False,
-    'backsolve' : True, 
-    'LBFGS_full_backsolve' : True,
+    'backsolve' : False, 
+    'LBFGS_full_backsolve' : False,
     'LBFGS_full_persistence' : True, 
     'LBFGS_recurse_chunks' : False
 }
