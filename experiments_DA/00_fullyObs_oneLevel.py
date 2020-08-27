@@ -19,7 +19,7 @@ T_rollout : 40
 T_pred : 50
 n_chunks : 40
 n_chunks_recursive : 40
-n_starts : 4
+n_starts : 20
 model_exp_id : 24
 model_forwarder : rk4_default
 optimizer : LBFGS
