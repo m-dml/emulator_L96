@@ -244,11 +244,13 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     res['targets_obs'] = sortL96fromChannels(res['targets_obs'].detach().cpu().numpy())
     res['loss_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
 
+    masks = gen.masks
     res['test_state'] = sortL96intoChannels(out[n_starts+T_pred], J=J).reshape(1, len(n_starts), J+1, K)
     res['test_state_obs'] = gen._sample_obs(as_tensor(res['test_state'])) # sets the loss masks!
     res['test_state_obs'] = sortL96fromChannels(res['test_state_obs'].detach().cpu().numpy())
     res['test_state_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
-    
+    gen.masks = masks
+
     if fn is None:
         fn = 'results/data_assimilation/fullyobs_initstate_tests_'
         fn = fn + f'exp{exp_id}_{model_forwarder_str}_{optimizer_str}_{obs_operator_str}'
@@ -257,7 +259,6 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     print('storing intermediate results')
     print('\n')
     np.save(res_dir + fn, arr=res)
-
 
     # ### define setup for optimization
 
@@ -268,8 +269,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     
     T_rollouts_chunks = np.arange(1, n_chunks_recursive+1) * (T_rollout//n_chunks_recursive)
     grndtrths_chunks = [out[n_starts] for j in range(n_chunks_recursive)]
-
-
+    
     # ## L-BFGS, solve across full rollout time recursively, initialize from forward solver in reverse
 
     if optimiziation_schemes['LBFGS_recurse_chunks']:
