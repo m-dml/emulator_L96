@@ -30,9 +30,9 @@ max_eval : -1
 tolerance_grad : 1e-12
 tolerance_change : 1e-12
 history_size: 10
-if_LBFGS_chunks : False
-if_LBFGS_full_chunks : False
-if_backsolve : True 
-if_LBFGS_full_backsolve : True
-if_LBFGS_full_persistence : True 
-if_LBFGS_recurse_chunks : False
+if_LBFGS_chunks : 0
+if_LBFGS_full_chunks : 0
+if_backsolve : 1 
+if_LBFGS_full_backsolve : 1
+if_LBFGS_full_persistence : 1 
+if_LBFGS_recurse_chunks : 0
