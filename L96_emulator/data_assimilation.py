@@ -16,8 +16,6 @@ from L96_emulator.networks import Model_forwarder_predictorCorrector, Model_forw
 
 from L96_emulator.likelihood import ObsOp_identity, ObsOp_subsampleGaussian, GenModel
 
-from L96sim.L96_base import f1, f2, pf2
-
 
 def mse_loss_fullyObs(x, t):
 
@@ -150,7 +148,8 @@ def optim_initial_state(
     return x_sols, loss_vals, time_vals, state_mses
 
 
-def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiziation_schemes, res_dir, data_dir):
+def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiziation_schemes,
+                    res_dir, data_dir, fn=None):
 
     # extract key variable names from input dicts
     K, J = system_pars['K'], system_pars['J']
@@ -172,7 +171,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         
     if optimiziation_schemes['LBFGS_full_backsolve']:
         assert optimiziation_schemes['backsolve'] # requirement for init
-        
+
 
     # get model
     model, model_forwarder, args = get_model(model_pars, res_dir=res_dir, exp_dir='')
@@ -191,8 +190,6 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     model_forwarder_str, optimizer_str = args['model_forwarder'], optimizer_pars['optimizer']
     obs_operator_str = model_observer.__class__.__name__
     exp_id = model_pars['exp_id']
-    fn = 'results/data_assimilation/fullyobs_initstate_tests_'
-    fn = fn + f'exp{exp_id}_{model_forwarder_str}_{optimizer_str}_{obs_operator_str}'
 
     # output dictionary
     res = { 'exp_id' : exp_id,
@@ -201,16 +198,11 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
             'T' : T, 
             'dt' : dt,
 
-            'spin_up_time' :  system_pars['spin_up_time'],
-            'prediction_task' : setup_pars['prediction_task'],
-            'train_frac' :  system_pars['train_frac'],
-            'normalize_data' : system_pars['normalize_data'],
             'back_solve_dt_fac' : system_pars['back_solve_dt_fac'],
             'F' : system_pars['F'], 
             'h' : system_pars['h'], 
             'b' : system_pars['b'], 
             'c' : system_pars['c'],
-            'lead_time' : setup_pars['lead_time'],
 
             'conf_exp' : args['conf_exp'],
             'model_forwarder' : model_pars['model_forwarder'], # should still be string
@@ -232,37 +224,6 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     }
 
 
-    # functions for explicitly solving backwards
-    dX_dt = np.empty(K*(J+1), dtype=dtype_np)
-    if J > 0:
-        def fun_eb(t, x):
-            return - f2(x, res['F'], res['h'], res['b'], res['c'], dX_dt, K, J)
-    else:
-        def fun_eb(t, x):
-            return - f1(x, res['F'], dX_dt, K)
-
-    def explicit_backsolve(x_init, times_eb, fun_eb):
-        x_sols = np.zeros_like(x_init)
-        for i__ in range(x_init.shape[0]):
-            out2 = rk4_default(fun=fun_eb, y0=x_init[i__], times=times_eb)
-            x_sols[i__] = out2[-1].copy()#.detach().cpu().numpy().copy()
-        return x_sols
-        
-    class Model_eb(torch.nn.Module):
-        def __init__(self, model):
-            super(Model_eb, self).__init__()            
-            self.model = model
-        def forward(self, x):
-            return - self.model.forward(x)
-
-    if res['model_forwarder'] == 'rk4_default':
-        Model_forwarder = Model_forwarder_rk4default  
-    elif res['model_forwarder'] == 'predictor_corrector':
-        Model_forwarder = Model_forwarder_predictorCorrector
-
-    model_forwarder_eb = Model_forwarder(model=Model_eb(model), dt=dt/res['back_solve_dt_fac'])
-
-
     # ### get data for 'typical' L96 state sequences
 
     out, datagen_dict = get_data(K=K, J=J, T=T, dt=dt, N_trials=N_trials, 
@@ -281,6 +242,10 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     res['targets_obs'] = gen._sample_obs(as_tensor(res['targets'])) # sets the loss masks!
     res['targets_obs'] = sortL96fromChannels(res['targets_obs'].detach().cpu().numpy())
     res['loss_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
+
+    if fn is None:
+        fn = 'results/data_assimilation/fullyobs_initstate_tests_'
+        fn = fn + f'exp{exp_id}_{model_forwarder_str}_{optimizer_str}_{obs_operator_str}'
 
     print('\n')
     print('storing intermediate results')
@@ -306,6 +271,21 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         print('\n')
         print('L-BFGS, solve across full rollout time recursively, initialize from forward solver in reverse')
         print('\n')
+
+        # functions for explicitly solving backwards
+        class Model_eb(torch.nn.Module):
+            def __init__(self, model):
+                super(Model_eb, self).__init__()
+                self.model = model
+            def forward(self, x):
+                return - self.model.forward(x)
+
+        if res['model_forwarder'] == 'rk4_default':
+            Model_forwarder = Model_forwarder_rk4default
+        elif res['model_forwarder'] == 'predictor_corrector':
+            Model_forwarder = Model_forwarder_predictorCorrector
+
+        model_forwarder_eb = Model_forwarder(model=Model_eb(model), dt=dt/res['back_solve_dt_fac'])
 
         x_inits = [None for z in range(n_chunks_recursive)]
         times_eb = dt * np.linspace(0, 
@@ -421,6 +401,24 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         print('\n')
         print('numerical forward solve in reverse')
         print('\n')
+
+        # functions for explicitly solving backwards
+        from L96sim.L96_base import f1, f2, pf2
+
+        dX_dt = np.empty(K*(J+1), dtype=dtype_np)
+        if J > 0:
+            def fun_eb(t, x):
+                return - f2(x, res['F'], res['h'], res['b'], res['c'], dX_dt, K, J)
+        else:
+            def fun_eb(t, x):
+                return - f1(x, res['F'], dX_dt, K)
+
+        def explicit_backsolve(x_init, times_eb, fun_eb):
+            x_sols = np.zeros_like(x_init)
+            for i__ in range(x_init.shape[0]):
+                out2 = rk4_default(fun=fun_eb, y0=x_init[i__], times=times_eb)
+                x_sols[i__] = out2[-1].copy()#.detach().cpu().numpy().copy()
+            return x_sols
 
         res['state_mses_backsolve'] = np.zeros((n_chunks_recursive, len(n_starts)))
         res['time_vals_backsolve'] = np.zeros((n_chunks_recursive, len(n_starts)))
