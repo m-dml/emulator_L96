@@ -2,6 +2,7 @@ import numpy as np
 from L96_emulator.data_assimilation import solve_initstate
 from L96_emulator.likelihood import ObsOp_subsampleGaussian, ObsOp_identity
 from configargparse import ArgParser
+import subprocess
 
 import os
 def mkdir_from_path(dir):
@@ -18,7 +19,9 @@ def run_exp_DA(exp_id, datadir, res_dir,
             if_LBFGS_chunks, if_LBFGS_full_chunks, if_backsolve, 
             if_LBFGS_full_backsolve, if_LBFGS_full_persistence, if_LBFGS_recurse_chunks):
 
-    fn = 'results/data_assimilation/' + exp_id
+    fetch_commit = subprocess.Popen(['git', 'rev-parse', 'HEAD'], shell=False, stdout=subprocess.PIPE)
+    commit_id = fetch_commit.communicate()[0].strip().decode("utf-8")
+    fetch_commit.kill()
 
     system_pars = {
         'K' : K,
@@ -83,6 +86,12 @@ def run_exp_DA(exp_id, datadir, res_dir,
         'LBFGS_full_persistence' : if_LBFGS_full_persistence, 
         'LBFGS_recurse_chunks' : if_LBFGS_recurse_chunks
     }
+
+    save_dir = 'results/data_assimilation/' + exp_id + '/'
+    mkdir_from_path(res_dir + save_dir)
+
+    open(res_dir + save_dir + commit_id + '.txt', 'w')
+    fn = save_dir + 'res'
 
     solve_initstate(system_pars=system_pars,
                     model_pars=model_pars,
