@@ -96,6 +96,9 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
         elif kwargs['model_forwarder'] == 'rk4_default':
             model_forwarder = Model_forwarder_rk4default(model, dt=dt)
 
+    else: 
+        raise NotImplementedError()
+
     return model, torch.jit.script(model_forwarder)
 
 
