@@ -18,7 +18,7 @@ obs_operator_sig2 : 1.0
 T_rollout : 40
 T_pred : 50
 n_chunks : 40
-n_chunks_recursive : 20
+n_chunks_recursive : 40
 n_starts : 4
 model_exp_id : 24
 model_forwarder : rk4_default
