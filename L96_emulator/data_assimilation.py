@@ -244,7 +244,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     res['targets_obs'] = sortL96fromChannels(res['targets_obs'].detach().cpu().numpy())
     res['loss_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
 
-    res['test_state'] = sortL96intoChannels(out[n_starts+T_pred], J=J)
+    res['test_state'] = sortL96intoChannels(out[n_starts+T_pred], J=J).reshape(1, len(n_starts), J+1, K)
     res['test_state_obs'] = gen._sample_obs(as_tensor(res['test_state'])) # sets the loss masks!
     res['test_state_obs'] = sortL96fromChannels(res['test_state_obs'].detach().cpu().numpy())
     res['test_state_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
