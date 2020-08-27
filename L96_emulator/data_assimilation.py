@@ -155,7 +155,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     K, J = system_pars['K'], system_pars['J']
     T, dt, N_trials = system_pars['T'], system_pars['dt'], system_pars['N_trials']
     
-    n_starts, T_rollout = setup_pars['n_starts'], setup_pars['T_rollout']
+    n_starts, T_rollout, T_pred = setup_pars['n_starts'], setup_pars['T_rollout'], setup_pars['T_pred'] 
     n_chunks, n_chunks_recursive = setup_pars['n_chunks'], setup_pars['n_chunks_recursive']
 
     N = len(n_starts)
@@ -210,6 +210,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
 
             'n_starts' : n_starts,
             'T_rollout' : T_rollout,
+            'T_pred' : T_pred, 
             'n_chunks' : n_chunks,
             'n_chunks_recursive' : n_chunks_recursive,
             'recursions_per_chunks' : recursions_per_chunks,
@@ -243,6 +244,11 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     res['targets_obs'] = sortL96fromChannels(res['targets_obs'].detach().cpu().numpy())
     res['loss_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
 
+    res['test_state'] = sortL96intoChannels(out[n_starts+T_pred], J=J)
+    res['test_state_obs'] = gen._sample_obs(as_tensor(res['test_state'])) # sets the loss masks!
+    res['test_state_obs'] = sortL96fromChannels(res['test_state_obs'].detach().cpu().numpy())
+    res['test_state_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
+    
     if fn is None:
         fn = 'results/data_assimilation/fullyobs_initstate_tests_'
         fn = fn + f'exp{exp_id}_{model_forwarder_str}_{optimizer_str}_{obs_operator_str}'
