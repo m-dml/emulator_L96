@@ -29,7 +29,7 @@ model_name: MinimalConvNetL96
 filters: [0]
 kernel_sizes: [4]
 init_net: rand
-K_net: 36
+K_net: 40
 J_net: 0
 model_forwarder: rk4_default
 dt_net: 0.05
