@@ -85,7 +85,7 @@ def optim_initial_state(
                                           m=loss_mask[:,n:n+1],
                                           T_obs=T_obs[j])
 
-                    if i_ == 0:
+                    if i_n == 0:
                         print('initial loss: ', loss)
                     if torch.any(torch.isnan(loss)):
                         loss_vals[i_n,n] = loss.detach().cpu().numpy()
