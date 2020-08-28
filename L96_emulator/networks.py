@@ -64,7 +64,13 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
 
         K, J = kwargs['K_net'], kwargs['J_net'], 
         init, dt, alpha = kwargs['init_net'], kwargs['dt_net'], kwargs['alpha_net']
-        model = MinimalNetL96(K,J, F=10.,b=10.,c=10.,h=1.,
+
+        F = kwargs['l96_F'] if 'l96_F' in kwargs.keys() else 10.
+        h = kwargs['l96_h'] if 'l96_h' in kwargs.keys() else 1.
+        b = kwargs['l96_b'] if 'l96_b' in kwargs.keys() else 10.
+        c = kwargs['l96_c'] if 'l96_c' in kwargs.keys() else 10.
+
+        model = MinimalNetL96(K,J, F=F, b=b,c=c,h=h,
                              skip_conn=True, init=init)
 
         def model_forward(x, mean_out=0., std_out=1.):
@@ -87,7 +93,13 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
 
         K, J = kwargs['K_net'], kwargs['J_net'], 
         init, dt = kwargs['init_net'], kwargs['dt_net']
-        model = MinimalConvNetL96(K, J, F=10., b=10., c=10., h=1., init=init)
+
+        F = kwargs['l96_F'] if 'l96_F' in kwargs.keys() else 10.
+        h = kwargs['l96_h'] if 'l96_h' in kwargs.keys() else 1.
+        b = kwargs['l96_b'] if 'l96_b' in kwargs.keys() else 10.
+        c = kwargs['l96_c'] if 'l96_c' in kwargs.keys() else 10.
+
+        model = MinimalConvNetL96(K, J, F=F, b=b, c=c, h=h,init=init)
 
         model = torch.jit.script(model)
         if kwargs['model_forwarder'] == 'predictor_corrector':
@@ -574,7 +586,8 @@ class MinimalNetL96(torch.nn.Module):
                                                   F=F, b=b, c=c, h=h, 
                                                   skip_conn=skip_conn)
             else: 
-                model_np = AnalyticModel_oneLevel(K=K, 
+                model_np = AnalyticModel_oneLevel(K=K,
+                                                  F=F,
                                                   skip_conn=skip_conn)
             def get_param(p):
                 p = as_tensor(p)
@@ -701,7 +714,7 @@ class MinimalConvNetL96(torch.nn.Module):
                 model_np = AnalyticConvModel_twoLevel(K=K, J=J, 
                                                   F=F, b=b, c=c, h=h)
             else: 
-                model_np = AnalyticConvModel_oneLevel(K=K)
+                model_np = AnalyticConvModel_oneLevel(K=K, F=F)
             def get_param(p):
                 p = as_tensor(p)
                 return torch.nn.Parameter(p)
