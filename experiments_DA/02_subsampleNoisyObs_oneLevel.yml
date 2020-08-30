@@ -13,7 +13,7 @@ l96_h : 1.
 l96_b : 10.
 l96_c : 10.
 obs_operator : ObsOp_subsampleGaussian 
-obs_operator_r : 0.1
+obs_operator_r : 0.9
 obs_operator_sig2 : 1.0
 T_rollout : 40
 T_pred : 50
