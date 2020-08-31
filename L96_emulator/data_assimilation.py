@@ -160,7 +160,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     # extract key variable names from input dicts
     K, J = system_pars['K'], system_pars['J']
     T, dt, N_trials = system_pars['T'], system_pars['dt'], system_pars['N_trials']
-    
+
     n_starts, T_rollout, T_pred = setup_pars['n_starts'], setup_pars['T_rollout'], setup_pars['T_pred'] 
     n_chunks, n_chunks_recursive = setup_pars['n_chunks'], setup_pars['n_chunks_recursive']
 
@@ -171,10 +171,10 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
 
     assert T_rollout//n_chunks_recursive == T_rollout/n_chunks_recursive
     assert T_rollout//n_chunks == T_rollout/n_chunks
-    
+
     if optimiziation_schemes['LBFGS_full_chunks']:
         assert optimiziation_schemes['LBFGS_chunks'] # requirement for init
-        
+
     if optimiziation_schemes['LBFGS_full_backsolve']:
         assert optimiziation_schemes['backsolve'] # requirement for init
 
@@ -250,7 +250,7 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     res['test_state_obs'] = gen._sample_obs(as_tensor(res['test_state'])) # sets the loss masks!
     res['test_state_obs'] = sortL96fromChannels(res['test_state_obs'].detach().cpu().numpy())
     res['test_state_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
-    
+
     res['targets_obs'] = gen._sample_obs(as_tensor(res['targets'])) # sets the loss masks!
     res['targets_obs'] = sortL96fromChannels(res['targets_obs'].detach().cpu().numpy())
     res['loss_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
@@ -533,6 +533,65 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     print('\n')
     print('done')
     print('\n')
+
+
+def solve_4dvar(y, m, T_obs, T_win, x_init,
+                model_pars, obs_pars, optimizer_pars,
+                res_dir, data_dir, fn=None):
+    """
+    def solve_4dvar(system_pars, model_pars, optimizer_pars, setup_pars, optimiziation_schemes,
+                res_dir, data_dir, fn=None):
+    """
+    
+    # extract key variable names from input dicts
+    y = y.reshape(1, *y.shape) if len(y.shape) == 3 else y
+    N, T, J, K = y.shape
+    J -= 1
+    assert y.shape == m.shape
+
+    # get model
+    model, model_forwarder, args = get_model(model_pars, res_dir=res_dir, exp_dir='')
+    model_observer = obs_pars['obs_operator'](**obs_pars['obs_operator_args'])
+    prior = torch.distributions.normal.Normal(loc=torch.zeros((1,J+1,K)), 
+                                              scale=1.*torch.ones((1,J+1,K)))
+    gen = GenModel(model_forwarder, model_observer, prior, T=T_win, x_init=None)
+
+    assert len(T_obs) == T
+    n_starts = np.max(T_obs) // T_win
+
+    T_obs_win, targets, loss_masks = [], [], []
+    for n in range(n_starts):
+        idx = np.where( np.logical_and((n+1)*T_win > T_obs, T_obs >= n*T_win))[0]
+        assert len(idx) > 0 # atm not supporting empty integration window
+        T_obs_win.append(T_obs_win[idx] - n*T_win)
+        targets.append(y[:, idx, :, :])
+        loss_masks.append(m[:, idx, :, :])
+
+    # ## L-BFGS optimization
+
+    print('\n')
+    print('L-BFGS')
+    print('\n')
+
+    if x_init is None:
+        x_init = get_init(sortL96intoChannels(y[:,0],J=J), m[:,0], method='interpolate')
+    x_inits = [x_init] + [None for j in range(n_chunks-1)]
+
+    opt_res = optim_initial_state(
+        gen,
+        T_rollouts=[T_win for j in n_starts],
+        T_obs=T_obs_win,
+        N=N,
+        n_chunks=n_starts,
+        optimizer_pars=optimizer_pars,
+        x_inits=x_inits,
+        targets=targets,
+        grndtrths=grndtrths,
+        loss_masks=loss_masks)
+
+    x_sols, loses, time_vals, state_mses = opt_res
+    
+    return x_sols, loses, time_vals, state_mses
 
 
 def get_model(model_pars, res_dir, exp_dir=''):
