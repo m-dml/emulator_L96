@@ -240,16 +240,15 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     res['targets'] = np.stack([sortL96intoChannels(out[n_starts+t+1], J=J) for t in T_obs[-1]], axis=0)
     
     # ## Generate observed data: (sub-)sample noisy observations
-    res['targets_obs'] = gen._sample_obs(as_tensor(res['targets'])) # sets the loss masks!
-    res['targets_obs'] = sortL96fromChannels(res['targets_obs'].detach().cpu().numpy())
-    res['loss_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
-
-    masks = gen.masks
     res['test_state'] = sortL96intoChannels(out[n_starts+T_pred], J=J).reshape(1, len(n_starts), J+1, K)
     res['test_state_obs'] = gen._sample_obs(as_tensor(res['test_state'])) # sets the loss masks!
     res['test_state_obs'] = sortL96fromChannels(res['test_state_obs'].detach().cpu().numpy())
     res['test_state_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
-    gen.masks = masks
+    
+    res['targets_obs'] = gen._sample_obs(as_tensor(res['targets'])) # sets the loss masks!
+    res['targets_obs'] = sortL96fromChannels(res['targets_obs'].detach().cpu().numpy())
+    res['loss_mask'] = torch.stack(gen.masks,dim=0).detach().cpu().numpy()
+
 
     if fn is None:
         fn = 'results/data_assimilation/fullyobs_initstate_tests_'
