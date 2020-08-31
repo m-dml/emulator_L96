@@ -99,7 +99,7 @@ class ObsOp_subsampleGaussian(ObsOp_identity):
 class GenModel(torch.nn.Module):
 
     def __init__(self, model_forwarder, model_observer, prior,
-                 T=1, x_init=None, use_prior=False):
+                 T=1, x_init=None):
 
         super(GenModel, self).__init__()
 
@@ -110,7 +110,6 @@ class GenModel(torch.nn.Module):
         self.masks = [self.model_observer.mask]
 
         self.prior = prior
-        self.use_prior = use_prior
 
         # variable container for e.g. maximim-likelihood estimate: 
         x_init = self.prior.sample() if x_init is None else x_init
