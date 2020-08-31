@@ -36,10 +36,16 @@ def convergenced_LBFGS(state_dict):
 
 def optim_initial_state(
       gen,
-      T_rollouts, T_obs, N, n_chunks,
+      T_rollouts, 
+      T_obs, 
+      N, 
+      n_chunks,
       optimizer_pars,
-      x_inits, targets, grndtrths, 
-      loss_masks=None, f_init=None):
+      x_inits, 
+      targets, 
+      grndtrths=None, 
+      loss_masks=None, 
+      f_init=None):
 
     sample_shape = gen.prior.sample().shape # (..., J+1, K)
     J, K = sample_shape[-2]-1, sample_shape[-1]
@@ -119,7 +125,7 @@ def optim_initial_state(
                 print(('{:.4f}'.format(time_vals[i_n,n]), loss_vals[i_n,n]))
 
             x_sols[j][n] = sortL96fromChannels(gen.X.detach().cpu().numpy().copy())
-            state_mses[j][n] = ((x_sols[j][n] - grndtrths[j][n])**2).mean()
+            state_mses[j][n] = np.inf if grndtrths is None else ((x_sols[j][n] - grndtrths[j][n])**2).mean()
 
         # if solving recursively, define next target as current initial state estimate 
         if j < n_chunks - 1 and targets[j+1] is None:
@@ -128,7 +134,8 @@ def optim_initial_state(
         i_ += n_steps
 
         with torch.no_grad():  
-            print('Eucl. distance to initial value', mse_loss_fullyObs(x_sols[j], grndtrths[j]))
+            if not grndtrths is None:
+                print('Eucl. distance to initial value', mse_loss_fullyObs(x_sols[j], grndtrths[j]))
             print('Eucl. distance to x_init', mse_loss_fullyObs(x_sols[j], sortL96fromChannels(x_inits[j])))
 
         if j < n_chunks - 1 and x_inits[j+1] is None:
@@ -549,6 +556,10 @@ def solve_4dvar(y, m, T_obs, T_win, x_init,
     J -= 1
     assert y.shape == m.shape
 
+    if x_init is None:
+        x_init = get_init(sortL96intoChannels(y[:,0],J=J), m[:,0], method='interpolate')
+    assert x_inits.shape == (N, J+1, K)
+    
     # get model
     model, model_forwarder, args = get_model(model_pars, res_dir=res_dir, exp_dir='')
     model_observer = obs_pars['obs_operator'](**obs_pars['obs_operator_args'])
@@ -559,39 +570,40 @@ def solve_4dvar(y, m, T_obs, T_win, x_init,
     assert len(T_obs) == T
     n_starts = np.max(T_obs) // T_win
 
-    T_obs_win, targets, loss_masks = [], [], []
+    out, losses, times = [], [], []
     for n in range(n_starts):
+
         idx = np.where( np.logical_and((n+1)*T_win > T_obs, T_obs >= n*T_win))[0]
         assert len(idx) > 0 # atm not supporting empty integration window
-        T_obs_win.append(T_obs_win[idx] - n*T_win)
-        targets.append(y[:, idx, :, :])
-        loss_masks.append(m[:, idx, :, :])
+        
+        x_inits = [x_init] + [None for j in range(n_chunks-1)]
 
-    # ## L-BFGS optimization
+        opt_res = optim_initial_state(
+            gen,
+            T_rollouts=[T_win],
+            T_obs=T_obs[idx] - n*T_win,
+            N=N,
+            n_chunks=1,
+            optimizer_pars=optimizer_pars,
+            x_inits=[x_init],
+            targets=[y[:, idx, :, :]],
+            grndtrths=None,
+            loss_masks=m[:, idx, :, :])
 
-    print('\n')
-    print('L-BFGS')
-    print('\n')
+        x_sols, loss_vals, time_vals, _ = opt_res
+        
+        out.append(x_sols)
+        losses.append(loss_vals)
+        times.append(time_vale)
 
-    if x_init is None:
-        x_init = get_init(sortL96intoChannels(y[:,0],J=J), m[:,0], method='interpolate')
-    x_inits = [x_init] + [None for j in range(n_chunks-1)]
-
-    opt_res = optim_initial_state(
-        gen,
-        T_rollouts=[T_win for j in n_starts],
-        T_obs=T_obs_win,
-        N=N,
-        n_chunks=n_starts,
-        optimizer_pars=optimizer_pars,
-        x_inits=x_inits,
-        targets=targets,
-        grndtrths=grndtrths,
-        loss_masks=loss_masks)
-
-    x_sols, loses, time_vals, state_mses = opt_res
+        ### fix me
+        # # need own prior class that knows about own axis for N ! Also need update for gen.log_prob !
+        #gen.prior = torch.distributions.normal.Normal(loc=torch.zeros((1,J+1,K)), # loc=x_sols
+        #                                              scale=1.*torch.ones((1,J+1,K)))
+        
+        x_init = x_sols.copy()
     
-    return x_sols, loses, time_vals, state_mses
+    return np.stack(out, axis=0), losses, times
 
 
 def get_model(model_pars, res_dir, exp_dir=''):
