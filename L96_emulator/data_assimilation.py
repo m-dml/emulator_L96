@@ -47,7 +47,7 @@ def optim_initial_state(
     
     loss_masks = [torch.ones((N,J+1,K)) for i in range(n_chunks)] if loss_masks is None else loss_masks
     assert len(loss_masks) == n_chunks
-
+    
     i_ = 0
     for j in range(n_chunks):
 
@@ -57,6 +57,7 @@ def optim_initial_state(
 
         target = sortL96intoChannels(as_tensor(targets[j]),J=J)
         loss_mask = loss_masks[j]
+        
         assert len(target) == len(T_obs[j]) and len(loss_mask) == len(T_obs[j])
 
         for n in range(N):
@@ -117,7 +118,7 @@ def optim_initial_state(
 
         # if solving recursively, define next target as current initial state estimate 
         if j < n_chunks - 1 and targets[j+1] is None:
-            targets[j+1] = x_sols[j].copy()
+            targets[j+1] = x_sols[j].copy().reshape(1, *x_sols[j].shape)
 
         i_ += n_steps
 
@@ -339,20 +340,22 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
         print('L-BFGS, solve across single chunks recursively, initialize from last chunk')
         print('\n')
 
+        assert len(T_obs) == 1 # only allow single observation at end of interval
+
         x_inits = [None for i in range(n_chunks_recursive)]
         x_inits[0] = get_init(sortL96intoChannels(res['targets_obs'],J=J)[0], res['loss_mask'][0], method='interpolate')
-
+        
         opt_res = optim_initial_state(
             gen,
             T_rollouts=np.ones(n_chunks_recursive, dtype=np.int) * (T_rollout//n_chunks_recursive),
-            T_obs=list(np.repeat(T_obs, recursions_per_chunks)),
+            T_obs=[[T_rollout//n_chunks_recursive] for j in range(n_chunks_recursive)],
             N=N,
             n_chunks=n_chunks_recursive,
             optimizer_pars=optimizer_pars,
             x_inits=x_inits,
-            targets=[res['targets_obs'][:len(T_obs[0])]] + [None for i in range(n_chunks_recursive-1)],
+            targets=[res['targets_obs']] + [None for i in range(n_chunks_recursive-1)],
             grndtrths=grndtrths_chunks,
-            loss_masks=[torch.stack(gen.masks,dim=0)] + [torch.ones((N,J+1,K)) for i in range(n_chunks_recursive-1)])
+            loss_masks=[torch.stack(gen.masks,dim=0)] + [torch.ones((1,N,J+1,K)) for i in range(n_chunks_recursive-1)])
 
         res['x_sols_LBFGS_chunks'] = opt_res[0]
         res['loss_vals_LBFGS_chunks'] = opt_res[1]
