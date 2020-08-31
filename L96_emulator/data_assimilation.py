@@ -124,8 +124,7 @@ def optim_initial_state(
                     loss = - gen.log_prob(y=target[:,n:n+1],
                                           m=loss_mask[:,n:n+1],
                                           T_obs=T_obs[j])
-                    if not priors is None:
-                        loss = loss - priors[n].log_prob(gen.X)
+                    loss = loss - priors[n].log_prob(gen.X)
                     if torch.is_grad_enabled():
                         optimizer.zero_grad()
                     if loss.requires_grad:
