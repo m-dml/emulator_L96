@@ -3,6 +3,24 @@ import torch
 
 from L96_emulator.util import as_tensor
 
+
+class SimplePrior(torch.nn.Module):
+    def __init__(self, J, K, loc=None, scale=1.):
+        super(SimplePrior, self).__init__()
+
+        loc = torch.zeros((J+1,K)) if loc is None else loc
+        if len(np.shape(scale)) == 0:
+            scale = scale * torch.ones(loc.shape) 
+        self.distr = torch.distributions.normal.Normal(loc=loc, scale=scale)
+
+    def log_prob(self, x):
+        assert len(x.shape) >= 2
+        return self.distr.log_prob(x).sum(axis=(-2,-1))
+    
+    def sample(self, args={}):
+        return self.distr.sample(**args)
+
+
 class ObsOp_identity(torch.nn.Module):
     def __init__(self):
         super(ObsOp_identity, self).__init__()
@@ -80,8 +98,8 @@ class ObsOp_subsampleGaussian(ObsOp_identity):
 
 class GenModel(torch.nn.Module):
 
-    def __init__(self, model_forwarder, model_observer, prior, 
-                 T=1, x_init=None):
+    def __init__(self, model_forwarder, model_observer, prior,
+                 T=1, x_init=None, use_prior=False):
 
         super(GenModel, self).__init__()
 
@@ -91,7 +109,8 @@ class GenModel(torch.nn.Module):
         self.model_observer = model_observer
         self.masks = [self.model_observer.mask]
 
-        self.prior = prior        
+        self.prior = prior
+        self.use_prior = use_prior
 
         # variable container for e.g. maximim-likelihood estimate: 
         x_init = self.prior.sample() if x_init is None else x_init

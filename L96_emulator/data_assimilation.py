@@ -14,7 +14,7 @@ from L96_emulator.eval import load_model_from_exp_conf, get_rollout_fun, named_n
 
 from L96_emulator.networks import Model_forwarder_predictorCorrector, Model_forwarder_rk4default
 
-from L96_emulator.likelihood import ObsOp_identity, ObsOp_subsampleGaussian, GenModel
+from L96_emulator.likelihood import ObsOp_identity, ObsOp_subsampleGaussian, GenModel, SimplePrior
 
 
 def mse_loss_fullyObs(x, t):
@@ -35,17 +35,18 @@ def convergenced_LBFGS(state_dict):
 
 
 def optim_initial_state(
-      gen,
-      T_rollouts, 
-      T_obs, 
-      N, 
-      n_chunks,
-      optimizer_pars,
-      x_inits, 
-      targets, 
-      grndtrths=None, 
-      loss_masks=None, 
-      f_init=None):
+    gen,
+    T_rollouts,
+    T_obs,
+    N,
+    n_chunks,
+    optimizer_pars,
+    x_inits,
+    targets,
+    grndtrths=None,
+    loss_masks=None,
+    priors=None,
+    f_init=None):
 
     sample_shape = gen.prior.sample().shape # (..., J+1, K)
     J, K = sample_shape[-2]-1, sample_shape[-1]
@@ -58,6 +59,15 @@ def optim_initial_state(
     
     loss_masks = [torch.ones((N,J+1,K)) for i in range(n_chunks)] if loss_masks is None else loss_masks
     assert len(loss_masks) == n_chunks
+    
+    if priors is None:
+        class Const_prior(object):
+            def __init__(self):
+                pass
+            def log_prob(self, x):
+                return 0.
+        priors = [Const_prior() for n in range(N)] 
+    assert len(priors) == N
     
     i_ = 0
     for j in range(n_chunks):
@@ -96,6 +106,7 @@ def optim_initial_state(
                     loss = - gen.log_prob(y=target[:,n:n+1],
                                           m=loss_mask[:,n:n+1],
                                           T_obs=T_obs[j])
+                    loss = loss - priors[n].log_prob(gen.X)
 
                     if i_n == 0:
                         print('initial loss: ', loss)
@@ -113,6 +124,8 @@ def optim_initial_state(
                     loss = - gen.log_prob(y=target[:,n:n+1],
                                           m=loss_mask[:,n:n+1],
                                           T_obs=T_obs[j])
+                    if not priors is None:
+                        loss = loss - priors[n].log_prob(gen.X)
                     if torch.is_grad_enabled():
                         optimizer.zero_grad()
                     if loss.requires_grad:
@@ -542,23 +555,20 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     print('\n')
 
 
-def solve_4dvar(y, m, T_obs, T_win, x_init,
-                model_pars, obs_pars, optimizer_pars,
-                res_dir, data_dir, fn=None):
+def solve_4dvar(y, m, T_obs, T_win, x_init, model_pars, obs_pars, optimizer_pars, res_dir):
     """
     def solve_4dvar(system_pars, model_pars, optimizer_pars, setup_pars, optimiziation_schemes,
                 res_dir, data_dir, fn=None):
     """
     
     # extract key variable names from input dicts
-    y = y.reshape(1, *y.shape) if len(y.shape) == 3 else y
-    N, T, J, K = y.shape
+    T, N, J, K = m.shape
     J -= 1
-    assert y.shape == m.shape
+    assert y.shape == (T,N,(J+1)*K)
 
     if x_init is None:
-        x_init = get_init(sortL96intoChannels(y[:,0],J=J), m[:,0], method='interpolate')
-    assert x_inits.shape == (N, J+1, K)
+        x_init = get_init(sortL96intoChannels(y[0],J=J).detach().cpu(), m[0].detach().cpu(), method='interpolate')
+    assert x_init.shape == (N, J+1, K)
     
     # get model
     model, model_forwarder, args = get_model(model_pars, res_dir=res_dir, exp_dir='')
@@ -566,42 +576,42 @@ def solve_4dvar(y, m, T_obs, T_win, x_init,
     prior = torch.distributions.normal.Normal(loc=torch.zeros((1,J+1,K)), 
                                               scale=1.*torch.ones((1,J+1,K)))
     gen = GenModel(model_forwarder, model_observer, prior, T=T_win, x_init=None)
+    priors = None
 
     assert len(T_obs) == T
     n_starts = np.max(T_obs) // T_win
 
     out, losses, times = [], [], []
     for n in range(n_starts):
+        
+        print('\n')
+        print(f'optimizing window number {n+1} / {n_starts}')
+        print('\n')
 
         idx = np.where( np.logical_and((n+1)*T_win > T_obs, T_obs >= n*T_win))[0]
         assert len(idx) > 0 # atm not supporting empty integration window
-        
-        x_inits = [x_init] + [None for j in range(n_chunks-1)]
 
         opt_res = optim_initial_state(
             gen,
             T_rollouts=[T_win],
-            T_obs=T_obs[idx] - n*T_win,
+            T_obs=[T_obs[idx] - n*T_win],
             N=N,
             n_chunks=1,
             optimizer_pars=optimizer_pars,
             x_inits=[x_init],
-            targets=[y[:, idx, :, :]],
+            targets=[y[idx]],
             grndtrths=None,
-            loss_masks=m[:, idx, :, :])
+            loss_masks=[m[idx]])
 
         x_sols, loss_vals, time_vals, _ = opt_res
         
-        out.append(x_sols)
+        out.append(sortL96intoChannels(x_sols[0],J=J))
         losses.append(loss_vals)
-        times.append(time_vale)
+        times.append(time_vals)
 
-        ### fix me
-        # # need own prior class that knows about own axis for N ! Also need update for gen.log_prob !
-        #gen.prior = torch.distributions.normal.Normal(loc=torch.zeros((1,J+1,K)), # loc=x_sols
-        #                                              scale=1.*torch.ones((1,J+1,K)))
+        priors = [SimplePrior(K=K, J=J, loc=as_tensor(out[-1][n]), scale=1.) for n in range(N)]
         
-        x_init = x_sols.copy()
+        x_init = out[-1].copy()
     
     return np.stack(out, axis=0), losses, times
 
