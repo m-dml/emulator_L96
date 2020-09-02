@@ -16,14 +16,15 @@ K = 40
 J = 0
 T = 5
 dt = 0.05
-N_trials = 2
+spinup_time = 50
+N_trials = 5
 F = 8.
 
-out, datagen_dict = get_data(K=K, J=J, T=T, dt=dt, N_trials=N_trials, 
+out, datagen_dict = get_data(K=K, J=J, T=T+spinup_time, dt=dt, N_trials=N_trials, 
                              F=F, 
                              resimulate=True, solver=rk4_default,
                              save_sim=False, data_dir='')
-out = sortL96intoChannels(out.transpose(1,0,2), J=J)
+out = sortL96intoChannels(out.transpose(1,0,2)[int(spinup_time/dt):], J=J)
 print('out.shape', out.shape)
 
 
@@ -64,13 +65,24 @@ optimizer_pars = {
 
 
 print('4D-VAR')
+T_win = 10
 x_sols, losses, times = solve_4dvar(y, m, 
                                     T_obs=np.arange(y.shape[0]), 
-                                    T_win=5, 
+                                    T_win=T_win, 
                                     x_init=None, 
                                     model_pars=model_pars, 
                                     obs_pars=obs_pars, 
                                     optimizer_pars=optimizer_pars,
                                     res_dir=res_dir)
+
+np.save(res_dir + 'results/data_assimilation/4D_var_test', 
+        {'out' : out,
+         'y' : y.detach().cpu().numpy(),
+         'm' : m.detach().cpu().numpy(),
+         'x_sols' : x_sols,
+         'losses' : losses,
+         'times' : times,
+         'T_win' : T_win
+        })
 print('x_sols.shape', x_sols.shape)
 print('done')
