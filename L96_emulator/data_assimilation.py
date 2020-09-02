@@ -610,8 +610,8 @@ def solve_4dvar(y, m, T_obs, T_win, x_init, model_pars, obs_pars, optimizer_pars
 
         priors = [SimplePrior(K=K, J=J, loc=as_tensor(out[-1][n]), scale=1.) for n in range(N)]
         
-        x_init = out[-1].copy()
-    
+        x_init = gen._forward(x=as_tensor(out[-1]), T_obs=[T_win-1])[0].detach().cpu().numpy()
+
     return np.stack(out, axis=0), losses, times
 
 
