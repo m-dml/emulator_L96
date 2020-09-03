@@ -114,6 +114,21 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
     return model, torch.jit.script(model_forwarder)
 
 
+class Model_forwarder_resolvent(torch.nn.Module):
+
+    def __init__(self, model, dt=1.):
+        super(Model_forwarder_resolvent, self).__init__()
+        if not dt == 1.:
+            print("WARNING: ignoring dt argument for Model_forwarder_resolvent class!")
+        self.dt = 1.
+        self.add_module('model', module=model)
+
+    def forward(self, x):
+        """ model.forward directly gives resolvent """
+
+        return self.model.forward(x)
+
+
 class Model_forwarder_predictorCorrector(torch.nn.Module):
 
     def __init__(self, model, dt, alpha=0.5):
