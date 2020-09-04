@@ -1,6 +1,9 @@
 import numpy as np
-from L96_emulator.data_assimilation import solve_initstate
-from L96_emulator.likelihood import ObsOp_subsampleGaussian, ObsOp_identity
+import torch
+from L96_emulator.data_assimilation import solve_initstate, solve_4dvar, get_model
+from L96_emulator.likelihood import ObsOp_subsampleGaussian, ObsOp_identity, GenModel
+from L96_emulator.util import rk4_default, predictor_corrector, get_data
+from L96_emulator.util import as_tensor, sortL96intoChannels, sortL96fromChannels
 from configargparse import ArgParser
 import subprocess
 
@@ -104,7 +107,7 @@ def run_exp_DA(exp_id, datadir, res_dir,
 
 def run_exp_4DVar(exp_id, datadir, res_dir,
             T_win, B,
-            K, J, T, N_trials, dt, spin_up_time, 
+            K, J, T, N_trials, dt, spin_up_time,
             l96_F, l96_h, l96_b, l96_c, obs_operator, obs_operator_r, obs_operator_sig2, 
             model_exp_id, model_forwarder, 
             optimizer, n_steps, lr, max_iter, max_eval, tolerance_grad, tolerance_change, history_size):
@@ -113,18 +116,36 @@ def run_exp_4DVar(exp_id, datadir, res_dir,
     commit_id = fetch_commit.communicate()[0].strip().decode("utf-8")
     fetch_commit.kill()
 
+    model_pars = {
+        'exp_id' : model_exp_id,
+        'model_forwarder' : model_forwarder,
+        'K_net' : K,
+        'J_net' : J,
+        'dt_net' : dt
+    }
+
+    optimizer_pars = {
+                  'optimizer' : optimizer,
+                  'n_steps' : n_steps,
+                  'lr' : lr,
+                  'max_iter' : max_iter,
+                  'max_eval' : None if max_eval < 0 else max_eval,
+                  'tolerance_grad' : tolerance_grad,
+                  'tolerance_change' : tolerance_change,
+                  'history_size': history_size
+    }
+
     if model_forwarder == 'rk4_default':
         model_forwarder = rk4_default
     if model_forwarder == 'predictor_corrector':
         model_forwarder = predictor_corrector
 
-    out, datagen_dict = get_data(K=K, J=J, T=T+spinup_time, dt=dt, N_trials=N_trials, 
+    out, datagen_dict = get_data(K=K, J=J, T=T+spin_up_time, dt=dt, N_trials=N_trials, 
                                  F=l96_F, h=l96_h, b=l96_b, c=l96_c, 
                                  resimulate=True, solver=model_forwarder,
                                  save_sim=False, data_dir='')
-    out = sortL96intoChannels(out.transpose(1,0,2)[int(spinup_time/dt):], J=J)
+    out = sortL96intoChannels(out.transpose(1,0,2)[int(spin_up_time/dt):], J=J)
     print('out.shape', out.shape)
-
 
     model, model_forwarder, args = get_model(model_pars, res_dir=res_dir, exp_dir='')
 

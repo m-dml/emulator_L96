@@ -19,7 +19,7 @@ obs_operator_sig2 : 1.0
 model_exp_id : 26
 model_forwarder : rk4_default
 optimizer : LBFGS
-n_steps : 50
+n_steps : 20
 lr : 1e0
 max_iter : 1000
 max_eval : -1
