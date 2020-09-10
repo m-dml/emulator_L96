@@ -106,7 +106,7 @@ def run_exp_DA(exp_id, datadir, res_dir,
                     fn=fn)
 
 def run_exp_4DVar(exp_id, datadir, res_dir,
-            T_win, B,
+            T_win, T_shift, B,
             K, J, T, N_trials, dt, spin_up_time,
             l96_F, l96_h, l96_b, l96_c, obs_operator, obs_operator_r, obs_operator_sig2, 
             model_exp_id, model_forwarder, 
@@ -115,6 +115,8 @@ def run_exp_4DVar(exp_id, datadir, res_dir,
     fetch_commit = subprocess.Popen(['git', 'rev-parse', 'HEAD'], shell=False, stdout=subprocess.PIPE)
     commit_id = fetch_commit.communicate()[0].strip().decode("utf-8")
     fetch_commit.kill()
+
+    T_shift = T_win if T_shift < 0 else T_shift # backwards compatibility to older exps with T_shift=T_win
 
     model_pars = {
         'exp_id' : model_exp_id,
@@ -175,12 +177,13 @@ def run_exp_4DVar(exp_id, datadir, res_dir,
     fn = save_dir + 'res'
 
     print('4D-VAR')
-    x_sols, losses, times = solve_4dvar(y, m, 
-                                        T_obs=np.arange(y.shape[0]), 
-                                        T_win=T_win, 
-                                        x_init=None, 
-                                        model_pars=model_pars, 
-                                        obs_pars=obs_pars, 
+    x_sols, losses, times = solve_4dvar(y, m,
+                                        T_obs=np.arange(y.shape[0]),
+                                        T_win=T_win,
+                                        T_shift=T_shift,
+                                        x_init=None,
+                                        model_pars=model_pars,
+                                        obs_pars=obs_pars,
                                         optimizer_pars=optimizer_pars,
                                         res_dir=res_dir)
 
@@ -191,7 +194,8 @@ def run_exp_4DVar(exp_id, datadir, res_dir,
              'x_sols' : x_sols,
              'losses' : losses,
              'times' : times,
-             'T_win' : T_win
+             'T_win' : T_win,
+             'T_shift' : T_shift
             })
     print('x_sols.shape', x_sols.shape)
     print('done')
@@ -254,6 +258,7 @@ def setup_4DVar(conf_exp=None):
     p.add_argument('--res_dir', type=str, required=True, help='path to results')
 
     p.add_argument('--T_win', type=int, required=True, help='4D-Var integration window in steps')
+    p.add_argument('--T_shift', type=int, default=-1, help='per-analysis shift of 4D-Var integration window in steps')
     p.add_argument('--B', type=float, required=True, help='scale for covariance matrix of init-state prior')
 
     p.add_argument('--K', type=int, required=True, help='number of slow variables (grid cells)')

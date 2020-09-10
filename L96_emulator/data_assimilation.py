@@ -554,12 +554,12 @@ def solve_initstate(system_pars, model_pars, optimizer_pars, setup_pars, optimiz
     print('\n')
 
 
-def solve_4dvar(y, m, T_obs, T_win, x_init, model_pars, obs_pars, optimizer_pars, res_dir):
+def solve_4dvar(y, m, T_obs, T_win, T_shift, x_init, model_pars, obs_pars, optimizer_pars, res_dir):
     """
     def solve_4dvar(system_pars, model_pars, optimizer_pars, setup_pars, optimiziation_schemes,
                 res_dir, data_dir, fn=None):
     """
-    
+
     # extract key variable names from input dicts
     T, N, J, K = m.shape
     J -= 1
@@ -568,7 +568,7 @@ def solve_4dvar(y, m, T_obs, T_win, x_init, model_pars, obs_pars, optimizer_pars
     if x_init is None:
         x_init = get_init(sortL96intoChannels(y[0],J=J).detach().cpu(), m[0].detach().cpu(), method='interpolate')
     assert x_init.shape == (N, J+1, K)
-    
+
     # get model
     model, model_forwarder, args = get_model(model_pars, res_dir=res_dir, exp_dir='')
     model_observer = obs_pars['obs_operator'](**obs_pars['obs_operator_args'])
@@ -577,23 +577,23 @@ def solve_4dvar(y, m, T_obs, T_win, x_init, model_pars, obs_pars, optimizer_pars
     gen = GenModel(model_forwarder, model_observer, prior, T=T_win, x_init=None)
     priors = None
 
-    assert len(T_obs) == T
-    n_starts = np.max(T_obs) // T_win
+    assert len(T_obs) == T # easy to generalize, but for now only support one obs per time point  
+    n_starts = (T - T_win) // T_shift + 1
 
     out, losses, times = [], [], []
     for n in range(n_starts):
-        
+
         print('\n')
         print(f'optimizing window number {n+1} / {n_starts}')
         print('\n')
 
-        idx = np.where( np.logical_and((n+1)*T_win > T_obs, T_obs >= n*T_win))[0]
+        idx = np.where( np.logical_and(n*T_shift+T_win > T_obs, T_obs >= n*T_shift))[0]
         assert len(idx) > 0 # atm not supporting empty integration window
 
         opt_res = optim_initial_state(
             gen,
             T_rollouts=[T_win],
-            T_obs=[T_obs[idx] - n*T_win],
+            T_obs=[T_obs[idx] - n*T_shift],
             N=N,
             n_chunks=1,
             optimizer_pars=optimizer_pars,
@@ -603,14 +603,14 @@ def solve_4dvar(y, m, T_obs, T_win, x_init, model_pars, obs_pars, optimizer_pars
             loss_masks=[m[idx]])
 
         x_sols, loss_vals, time_vals, _ = opt_res
-        
+
         out.append(sortL96intoChannels(x_sols[0],J=J))
         losses.append(loss_vals)
         times.append(time_vals)
 
         priors = [SimplePrior(K=K, J=J, loc=as_tensor(out[-1][n]), scale=1.) for n in range(N)]
-        
-        x_init = gen._forward(x=as_tensor(out[-1]), T_obs=[T_win-1])[0].detach().cpu().numpy()
+
+        x_init = gen._forward(x=as_tensor(out[-1]), T_obs=[T_shift-1])[0].detach().cpu().numpy()
 
     return np.stack(out, axis=0), losses, times
 
