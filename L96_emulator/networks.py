@@ -89,7 +89,7 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
 
             return  sortL96fromChannels(x)
 
-    elif model_name == 'MinimalConvNetL96':
+    elif model_name in ['MinimalConvNetL96', 'BilinearConvNetL96']:
 
         K, J = kwargs['K_net'], kwargs['J_net'], 
         init, dt = kwargs['init_net'], kwargs['dt_net']
@@ -99,7 +99,11 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
         b = kwargs['l96_b'] if 'l96_b' in kwargs.keys() else 10.
         c = kwargs['l96_c'] if 'l96_c' in kwargs.keys() else 10.
 
-        model = MinimalConvNetL96(K, J, F=F, b=b, c=c, h=h,init=init)
+        if model_name == 'MinimalConvNetL96':
+            ConvNetL96 = MinimalConvNetL96
+        if model_name == 'BilinearConvNetL96':
+            ConvNetL96 = BilinearConvNetL96
+        model = ConvNetL96(K, J, F=F, b=b, c=c, h=h,init=init)
 
         model = torch.jit.script(model)
         if kwargs['model_forwarder'] == 'predictor_corrector':
@@ -745,5 +749,96 @@ class MinimalConvNetL96(torch.nn.Module):
 
         z = self.nonlinearity(self.layer1(x))
         out = self.layer2(torch.cat((z, x), dim=1))
+
+        return out
+
+
+class AnalyticBilinearConvModel_oneLevel():
+
+    def __init__(self, K, F=10.):
+
+        self.K = K
+        self.nonlinearity = lambda x: x
+        self.W1 = np.array([[ 0, 1, 0, 0],  # X_k-1
+                            [-1, 0, 0, 1],  # X_k+1 - X_k-2
+                            [ 0, 0, 1, 0]], # X_k
+                          dtype=dtype_np).reshape(3,1,4)
+        self.W2 = np.array([1.],
+                          dtype=dtype_np).reshape(1,1,1)
+        self.W3 = np.array([1, -1],
+                          dtype=dtype_np).reshape(1,2,1)
+        
+        self.b1 = np.zeros(3, dtype=dtype_np)
+        self.b3 = F * np.ones(1, dtype=dtype_np)
+
+    def forward(self, x):
+
+        raise NotImplementedError()
+
+
+class BilinearConvNetL96(torch.nn.Module):
+
+    def __init__(self, K, J=0, F=10., b=10., c=10., h=1., init='rand'):
+        
+        super(BilinearConvNetL96, self).__init__()
+            
+        self.layer1 = setup_conv(in_channels = J+1, 
+                                 out_channels = 3*(J+1), 
+                                 kernel_size = 5 if J == 1 else 4, 
+                                 bias = True, 
+                                 padding_mode='circular', 
+                                 stride=1)
+        
+        self.layer2 = torch.nn.Bilinear(in1_features = 1*(J+1), 
+                                        in2_features = 1*(J+1), 
+                                        out_features = 1*(J+1), 
+                                        bias = False)
+        # channel index cutoffs for grouping into bilinear layer inputs: 
+        self.chgrp1, self.chgrp2 = J+1, 2*(J+1)
+
+        self.layer3 = setup_conv(in_channels = 2*(J+1), 
+                                 out_channels = J+1, 
+                                 kernel_size = 1, 
+                                 bias = True, 
+                                 padding_mode='circular', 
+                                 stride=1)
+
+        self.nonlinearity = torch.nn.Identity()
+
+        if init == 'analytical':
+
+
+            if J > 0:
+                raise NotImplementedError()
+                model_np = AnalyticBilinearConvModel_twoLevel(K=K, J=J,
+                                                  F=F, b=b, c=c, h=h)
+            else:
+                model_np = AnalyticBilinearConvModel_oneLevel(K=K, F=F)
+
+            def get_param(p):
+                p = as_tensor(p)
+                return torch.nn.Parameter(p)
+
+            self.layer1.weight = get_param(model_np.W1)
+            self.layer1.bias = get_param(model_np.b1.flatten())
+            self.layer2.weight = get_param(model_np.W2)
+            self.layer3.weight = get_param(model_np.W3)
+            self.layer3.bias = get_param(model_np.b3.flatten())
+
+    def forward(self, x):
+
+        assert len(x.shape) == 3 # (N, J+1, K), J 'channels', K locations
+
+        y = self.nonlinearity(self.layer1(x))
+        
+        # split tensor along channels: first two chunks go into bilinear layer
+        y1, y2, y3 = y[:, :self.chgrp1], y[:, self.chgrp1:self.chgrp2], y[:, self.chgrp2:]
+
+        # bilinear layer
+        z = self.nonlinearity(self.layer2(y1.transpose(1,2).reshape(-1,self.chgrp1), 
+                                          y2.transpose(1,2).reshape(-1,self.chgrp2-self.chgrp1)
+                                         ).reshape(x.shape[0], x.shape[1], x.shape[2])
+                             )
+        out = self.layer3(torch.cat((z, y3), dim=1))
 
         return out
