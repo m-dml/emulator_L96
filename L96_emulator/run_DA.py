@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from L96_emulator.data_assimilation import solve_initstate, solve_4dvar, get_model
-from L96_emulator.likelihood import ObsOp_subsampleGaussian, ObsOp_identity, GenModel
+from L96_emulator.likelihood import ObsOp_subsampleGaussian, ObsOp_identity, ObsOp_rotsampleGaussian, GenModel
 from L96_emulator.util import rk4_default, predictor_corrector, get_data
 from L96_emulator.util import as_tensor, sortL96intoChannels, sortL96fromChannels
 from configargparse import ArgParser
@@ -15,7 +15,7 @@ def mkdir_from_path(dir):
 
 def run_exp_DA(exp_id, datadir, res_dir,
             K, J, T, N_trials, dt, back_solve_dt_fac, spin_up_time, 
-            l96_F, l96_h, l96_b, l96_c, obs_operator, obs_operator_r, obs_operator_sig2, 
+            l96_F, l96_h, l96_b, l96_c, obs_operator, obs_operator_r, obs_operator_sig2, obs_operator_frq,
             T_rollout, T_pred, n_chunks, n_chunks_recursive, n_starts,
             model_exp_id, model_forwarder, 
             optimizer, n_steps, lr, max_iter, max_eval, tolerance_grad, tolerance_change, history_size,
@@ -46,6 +46,10 @@ def run_exp_DA(exp_id, datadir, res_dir,
     elif obs_operator=='ObsOp_identity':
         system_pars['obs_operator'] = ObsOp_identity
         system_pars['obs_operator_args'] = {}
+    elif obs_operator=='ObsOp_rotsampleGaussian':
+        obs_pars['obs_operator'] = ObsOp_rotsampleGaussian
+        obs_pars['obs_operator_args'] = {'frq' : obs_operator_frq, 
+                                         'sigma2' : obs_operator_sig2}
     else:
         raise NotImplementedError()
         
@@ -158,7 +162,7 @@ def run_exp_4DVar(exp_id, datadir, res_dir,
     elif obs_operator=='ObsOp_identity':
         obs_pars['obs_operator'] = ObsOp_identity
         obs_pars['obs_operator_args'] = {}
-    elif res['obs_operator']=='ObsOp_rotsampleGaussian':
+    elif obs_operator=='ObsOp_rotsampleGaussian':
         obs_pars['obs_operator'] = ObsOp_rotsampleGaussian
         obs_pars['obs_operator_args'] = {'frq' : obs_operator_frq, 
                                          'sigma2' : obs_operator_sig2}
@@ -227,6 +231,7 @@ def setup_DA(conf_exp=None):
     p.add_argument('--obs_operator', type=str, required=True, help='string for observation operator class')
     p.add_argument('--obs_operator_r', type=float, default=0., help='fraction of unobserved state entries')
     p.add_argument('--obs_operator_sig2', type=float, default=1.0, help='variance of additive observation noise')
+    p.add_argument('--obs_operator_frq', type=int, default=4, help='cycle length for rotating observation operator')
 
     p.add_argument('--T_rollout', type=int, required=True, help='maximum length of rollout')
     p.add_argument('--T_pred', type=int, required=True, help='prediction time')
