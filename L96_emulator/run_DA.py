@@ -108,7 +108,7 @@ def run_exp_DA(exp_id, datadir, res_dir,
 def run_exp_4DVar(exp_id, datadir, res_dir,
             T_win, T_shift, B,
             K, J, T, N_trials, dt, spin_up_time,
-            l96_F, l96_h, l96_b, l96_c, obs_operator, obs_operator_r, obs_operator_sig2, 
+            l96_F, l96_h, l96_b, l96_c, obs_operator, obs_operator_r, obs_operator_sig2, obs_operator_frq,
             model_exp_id, model_forwarder, 
             optimizer, n_steps, lr, max_iter, max_eval, tolerance_grad, tolerance_change, history_size):
 
@@ -158,6 +158,10 @@ def run_exp_4DVar(exp_id, datadir, res_dir,
     elif obs_operator=='ObsOp_identity':
         obs_pars['obs_operator'] = ObsOp_identity
         obs_pars['obs_operator_args'] = {}
+    elif res['obs_operator']=='ObsOp_rotsampleGaussian':
+        obs_pars['obs_operator'] = ObsOp_rotsampleGaussian
+        obs_pars['obs_operator_args'] = {'frq' : obs_operator_frq, 
+                                         'sigma2' : obs_operator_sig2}
     else:
         raise NotImplementedError()
     model_observer = obs_pars['obs_operator'](**obs_pars['obs_operator_args'])
@@ -276,6 +280,7 @@ def setup_4DVar(conf_exp=None):
     p.add_argument('--obs_operator', type=str, required=True, help='string for observation operator class')
     p.add_argument('--obs_operator_r', type=float, default=0., help='fraction of unobserved state entries')
     p.add_argument('--obs_operator_sig2', type=float, default=1.0, help='variance of additive observation noise')
+    p.add_argument('--obs_operator_frq', type=int, default=4, help='cycle length for rotating observation operator')
 
     p.add_argument('--model_exp_id', type=int, required=True, help='exp_id for emulator-training experiment')
     p.add_argument('--model_forwarder', type=str, default='rk4_default', help='string for model forwarder (e.g. RK4)')
