@@ -96,6 +96,53 @@ class ObsOp_subsampleGaussian(ObsOp_identity):
         return (m * self.ndistr.log_prob(x - y)).sum(axis=(-2,-1)) # sum from iid over dims
 
 
+class ObsOp_rotsampleGaussian(ObsOp_identity):
+    def __init__(self, sample_shape, frq=4, sigma2=0.):
+        super(ObsOp_rotsampleGaussian, self).__init__()
+        assert sigma2 >= 0.
+        self.sigma2 = as_tensor(sigma2)
+        self.sigma = torch.sqrt(self.sigma2)
+        self.ndistr = torch.distributions.normal.Normal(loc=0., scale=self.sigma)
+
+        assert 0. <= frq
+        self.frq = frq
+        self.mask = 1.
+        self.ridx = 0
+
+        # instantiate single, fixed observation scheme 
+        self.sample_shape = sample_shape
+        self.len_chunk = np.prod(self.sample_shape)//self.frq
+        assert self.len_chunk == np.prod(self.sample_shape) / self.frq # only allow same-size observation fractions
+        self.permidx = torch.randperm(int(np.prod(self.sample_shape)))
+
+    def _sample_mask(self, sample_shape):
+
+        assert np.all(self.sample_shape==sample_shape)
+        self.mask = torch.zeros(sample_shape)
+        self.mask.flatten()[self.permidx[self.ridx*self.len_chunk:(self.ridx+1)*self.len_chunk]] = True
+        self.ridx = np.mod(self.ridx+1, self.frq)        
+
+    def sample(self, x, m=None): # observation operator (incl. stochastic parts)
+        """ sample y ~ p(y |x, m) """
+        if m is None:
+            self._sample_mask(sample_shape=x.shape)
+            m = self.mask
+        eps = self.sigma * self.ndistr.sample(sample_shape=x.shape)
+        return m * (self.forward(x) + eps)
+
+    def log_prob(self, y, x, m=None):
+        """ log p(y|x, m)  """
+        assert len(y.shape) == 3 # N x J+1 x K
+
+        x = x.reshape(1, *x.shape) if len(x.shape)==2 else x
+        if m is None:
+            m = self.mask
+        m = m.reshape(1, *m.shape) if len(m.shape)==2 else m
+
+        assert y.shape[1:] == m.shape[1:] and x.shape[1:] == y.shape[1:]
+        return (m * self.ndistr.log_prob(x - y)).sum(axis=(-2,-1)) # sum from iid over dims
+
+
 class GenModel(torch.nn.Module):
 
     def __init__(self, model_forwarder, model_observer, prior,
