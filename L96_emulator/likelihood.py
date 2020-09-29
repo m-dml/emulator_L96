@@ -173,10 +173,12 @@ class GenModel(torch.nn.Module):
         T_obs = [self.T-1] if T_obs is None else T_obs
 
         y = []
-        for t in range(np.max(T_obs) + 1):
-            x = self.model_forwarder.forward(x)
+
+        for t in range(np.max(T_obs)):
             if t in T_obs:
                 y.append(x)
+            x = self.model_forwarder.forward(x)
+        y.append(x) # append prediction for max(T_obs)
 
         return y # returns a list of len(T_obs)!
 
