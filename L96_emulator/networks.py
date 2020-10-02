@@ -728,6 +728,7 @@ class MinimalConvNetL96(torch.nn.Module):
 
         self.nonlinearity = _pointwise_square
 
+        assert init in ['analytical', 'rand']
         if init == 'analytical':
             if J > 0:
                 model_np = AnalyticConvModel_twoLevel(K=K, J=J, 

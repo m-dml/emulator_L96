@@ -59,7 +59,7 @@ def optim_initial_state(
     
     loss_masks = [torch.ones((N,J+1,K)) for i in range(n_chunks)] if loss_masks is None else loss_masks
     assert len(loss_masks) == n_chunks
-    
+
     if priors is None:
         class Const_prior(object):
             def __init__(self):
@@ -68,7 +68,7 @@ def optim_initial_state(
                 return 0.
         priors = [Const_prior() for n in range(N)] 
     assert len(priors) == N
-    
+
     i_ = 0
     for j in range(n_chunks):
 
@@ -78,7 +78,7 @@ def optim_initial_state(
 
         target = sortL96intoChannels(as_tensor(targets[j]),J=J)
         loss_mask = loss_masks[j]
-        
+
         assert len(target) == len(T_obs[j]) and len(loss_mask) == len(T_obs[j])
 
         for n in range(N):
@@ -86,7 +86,6 @@ def optim_initial_state(
             print('\n')
             print(f'optimizing over initial state #{n+1} / {N}')
             print('\n')
-
 
             gen.set_state(x_inits[j][n:n+1])
             gen.set_rollout_len(T_rollouts[j])

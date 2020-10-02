@@ -168,8 +168,8 @@ def run_exp_4DVar(exp_id, datadir, res_dir,
                                          'sigma2' : obs_operator_sig2}
     else:
         raise NotImplementedError()
-    model_observer = obs_pars['obs_operator'](**obs_pars['obs_operator_args'])
 
+    model_observer = obs_pars['obs_operator'](**obs_pars['obs_operator_args'])
 
     prior = torch.distributions.normal.Normal(loc=torch.zeros((1,J+1,K)), 
                                               scale=B*torch.ones((1,J+1,K)))
@@ -205,6 +205,7 @@ def run_exp_4DVar(exp_id, datadir, res_dir,
              'T_win' : T_win,
              'T_shift' : T_shift
             })
+
     print('x_sols.shape', x_sols.shape)
     print('done')
 
