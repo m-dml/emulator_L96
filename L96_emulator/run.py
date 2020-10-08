@@ -29,9 +29,9 @@ def sel_dataset_class(prediction_task, N_trials, local):
     return DatasetClass
 
 def run_exp(exp_id, datadir, res_dir,
-            K, K_local, J, T, N_trials, dt,
+            K, K_local, J, T, N_trials, dt, n_local,
             prediction_task, lead_time, seq_length, train_frac, validation_frac, spin_up_time,            
-            model_name, padding_mode, loss_fun, weight_decay, batch_size, max_epochs, eval_every, 
+            model_name, loss_fun, weight_decay, batch_size, max_epochs, eval_every, 
             max_patience, lr, lr_min, lr_decay, max_lr_patience, only_eval, normalize_data, **net_kwargs):
 
     fetch_commit = subprocess.Popen(['git', 'rev-parse', 'HEAD'], shell=False, stdout=subprocess.PIPE)
@@ -58,12 +58,13 @@ def run_exp(exp_id, datadir, res_dir,
                'normalize' : bool(normalize_data)}
     if DatasetClass == DatasetMultiTrial_shattered:
         dg_args['K_local'] = K_local
+        dg_args['n_local'] = n_local
 
     dg_train = DatasetClass(start=spin_up, 
                             end=int(np.floor(T/dt*train_frac)),
                             **dg_args)
     dg_val   = DatasetClass(start=int(np.ceil(T/dt*train_frac)),
-                            end=int(np.ceil(T/dt*(train_frac+validation_frac)),
+                            end=int(np.ceil(T/dt*(train_frac+validation_frac))),
                             **dg_args)
 
     print('N training data:', len(dg_train))
@@ -86,8 +87,11 @@ def run_exp(exp_id, datadir, res_dir,
                                          n_output_channels=J+1,
                                          seq_length=seq_length,
                                          **net_kwargs)
-
-    test_input = np.random.normal(size=(10, seq_length*(J+1), K))
+    print('model.layer1.weights', model.layer1.weight.shape)
+    if K_local < K:
+        test_input = np.random.normal(size=(10, seq_length*(J+1), K_local + 3*n_local))
+    else:
+        test_input = np.random.normal(size=(10, seq_length*(J+1), K))
     print(f'model output shape to test input of shape {test_input.shape}', 
           model_forward(as_tensor(test_input)).shape)
     print('total #parameters: ', np.sum([np.prod(item.shape) for item in model.state_dict().values()]))
@@ -105,8 +109,15 @@ def run_exp(exp_id, datadir, res_dir,
         open(save_dir + commit_id + '.txt', 'w')
 
         output_fn = '_training_outputs'
-
-        loss_fun = loss_function(loss_fun, extra_args={})
+        extra_args={}
+        if loss_fun=='local_mse':
+            extra_args = {
+                'n_local' : n_local,
+                'pad_local' : (2,2) if J==1 else (2,1) # relevant local area for L96 diff.eq. 
+            }
+        print('loss_fun', loss_fun)
+        loss_fun = loss_function(loss_fun, extra_args=extra_args)
+        print('loss_fun', loss_fun)
         training_outputs = train_model(
             model, train_loader, validation_loader, device, model_forward, loss_fun=loss_fun,
             weight_decay=weight_decay, max_epochs=max_epochs, max_patience=max_patience, 
@@ -131,6 +142,7 @@ def setup(conf_exp=None):
 
     p.add_argument('--K', type=int, required=True, help='number of slow variables (grid cells)')
     p.add_argument('--K_local', type=int, default=-1, help='number of slow variables (grid cells) in local training region')
+    p.add_argument('--n_local', type=int, default=0, help='number of local training regions needed for single update step')
     p.add_argument('--J', type=int, required=True, help='number of fast variables (vertical levels)')
     p.add_argument('--T', type=int, required=True, help='length of simulation data (in time units [s])')
     p.add_argument('--dt', type=float, required=True, help='simulation step length (in time units [s])')

@@ -111,7 +111,7 @@ class DatasetMultiTrial(Dataset):
 
 class DatasetMultiTrial_shattered(DatasetMultiTrial):
     def __init__(self, data, offset=1, J=0,
-                 start=None, end=None, K_local=None,
+                 start=None, end=None, K_local=None, n_local=1,
                  normalize=False, randomize_order=True):
 
         super(DatasetMultiTrial_shattered, self).__init__(
@@ -120,12 +120,15 @@ class DatasetMultiTrial_shattered(DatasetMultiTrial):
         )
         self.K_local = self.K if K_local is None else K_local
         assert self.K_local <= self.K
+        self.n_local = n_local
+        assert self.n_local >= 1
+        self.local_pad = (2,1) # L96 diff.eq. needs info from 3 relative locations k=-2,-1,+1 
 
         idx_Ks_out, idx_Ks_in =[], []
+        local_idx = np.arange(-self.local_pad[0]*n_local,self.K_local+self.local_pad[1]*n_local)
         for k in np.arange(0, self.K-self.K_local+1, self.K_local):
-            idx_Ks_in.append(np.mod(np.arange(-2,self.K_local+1)+k, self.K))
+            idx_Ks_in.append(np.mod(local_idx+k, self.K))
             idx_Ks_out.append(np.arange(self.K_local)+k)
-
         self.l_regs = len(idx_Ks_in)
         self.idx_Ks_in, self.idx_Ks_out = np.concatenate(idx_Ks_in), np.concatenate(idx_Ks_out)
                              
@@ -145,7 +148,7 @@ class DatasetMultiTrial_shattered(DatasetMultiTrial):
             idx = [torch.arange(iter_start, iter_end, requires_grad=False, device='cpu') for j in range(self.N)]
             idx = torch.cat([j*self.T + idx[j] for j in range(len(idx))])
 
-        X = self.data[:,:,self.idx_Ks_in][idx].reshape(-1,self.J+1,self.l_regs,self.K_local+3)
+        X = self.data[:,:,self.idx_Ks_in][idx].reshape(-1,self.J+1,self.l_regs,self.K_local+self.local_size*self.n_local)
         y = self.data[:,:,self.idx_Ks_out][idx+self.offset].reshape(-1,self.J+1,self.l_regs,self.K_local)
 
         X = X.transpose(0,2,1,3)

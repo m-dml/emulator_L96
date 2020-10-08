@@ -9,6 +9,21 @@ def loss_function(loss_fun, extra_args={}):
     if loss_fun == 'mse':
         return F.mse_loss
 
+    elif loss_fun == 'local_mse':
+        n_local = extra_args['n_local']
+        pad_local = extra_args['pad_local']
+        assert len(pad_local) == 2 # left and right padding along L96 ring of locations
+
+        def local_mse(inputs, targets):
+            # inputs.shape  = (N, J+1, K_local+n_local*sum(pad_local))
+            # targets.shape = (N, J+1, K_local)
+            assert len(inputs.shape)==3
+            error = inputs[..., n_local*pad_local[0]:-n_local*pad_local[1]] - targets
+            local_mse = torch.sum((error)**2) / inputs.shape[0]            
+            return local_mse
+        
+        return local_mse
+    
     elif loss_fun == 'lat_mse':
         # Copied from weatherbench fork of S. Rasp: 
         weights_lat = np.cos(np.deg2rad(extra_args['lat']))

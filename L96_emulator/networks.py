@@ -183,6 +183,11 @@ class PeriodicConv1D(torch.nn.Conv1d):
             return F.conv1d(F.pad(input, expanded_padding_circ, mode='circular'), 
                             self.weight, self.bias, self.stride,
                             (0,), self.dilation, self.groups)
+        elif self.padding_mode == 'valid':
+            expanded_padding_circ = (self.padding[0] // 2, (self.padding[0] - 1) // 2)
+            return F.conv1d(F.pad(input, expanded_padding_circ, mode='constant', value=0.), 
+                            self.weight, self.bias, self.stride,
+                            (0,), self.dilation, self.groups)
         return F.conv1d(input, self.weight, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
 
@@ -191,7 +196,7 @@ def setup_conv(in_channels, out_channels, kernel_size, bias, padding_mode, strid
     Select between regular and circular 1D convolutional layers.
     padding_mode='circular' returns a convolution that wraps padding around the final axis.
     """
-    if padding_mode=='circular':
+    if padding_mode in ['circular', 'valid']:
         return PeriodicConv1D(in_channels=in_channels,
                       out_channels=out_channels,
                       kernel_size=kernel_size,
@@ -199,13 +204,6 @@ def setup_conv(in_channels, out_channels, kernel_size, bias, padding_mode, strid
                       bias=bias,
                       stride=stride,
                       padding_mode=padding_mode)
-    elif padding_mode=='valid':
-        return torch.nn.Conv1d(in_channels=in_channels,
-                              out_channels=out_channels,
-                              kernel_size=kernel_size,
-                              padding=0,
-                              stride=stride,
-                              bias=bias)
     else:
         return torch.nn.Conv1d(in_channels=in_channels,
                               out_channels=out_channels,

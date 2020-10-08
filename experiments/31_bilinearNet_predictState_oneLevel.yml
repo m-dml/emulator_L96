@@ -1,4 +1,4 @@
-exp_id: minimalNet_predictState_J_initRand_RK_multiTrial_thorough_local
+exp_id: bilinearNet_predictState_J_initRand_RK_multiTrial_thorough_local
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
 K: 40
@@ -26,7 +26,7 @@ max_lr_patience: 10
 max_patience: 50
 eval_every: 2000
 max_epochs: 5000
-model_name: MinimalConvNetL96
+model_name: BilinearConvNetL96
 filters: [0]
 kernel_sizes: [4]
 padding_mode: valid
