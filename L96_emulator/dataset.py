@@ -123,7 +123,7 @@ class DatasetMultiTrial_shattered(DatasetMultiTrial):
         self.n_local = n_local
         assert self.n_local >= 1
         self.local_pad = (2,1) # L96 diff.eq. needs info from 3 relative locations k=-2,-1,+1 
-        self.local_size = np.sum(local_pad)
+        self.local_size = np.sum(self.local_pad)
 
         idx_Ks_out, idx_Ks_in =[], []
         local_idx = np.arange(-self.local_pad[0]*n_local,self.K_local+self.local_pad[1]*n_local)
