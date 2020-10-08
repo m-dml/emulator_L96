@@ -51,7 +51,8 @@ def load_model_from_exp_conf(res_dir, conf):
             'J_net' : conf['J_net'], 
             'dt_net' : conf['dt_net'], 
             'alpha_net' : conf['alpha_net'],
-            'model_forwarder' : conf['model_forwarder']
+            'model_forwarder' : conf['model_forwarder'],
+            'padding_mode' : conf['padding_mode']
     }
 
     model, model_forward = named_network(model_name=conf['model_name'], 
