@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from L96_emulator.util import init_torch_device, device, as_tensor
 from L96_emulator.networks import named_network
-from L96_emulator.dataset import Dataset, DatasetMultiTrial, DatasetRelPred, DatasetRelPredPast
+from L96_emulator.dataset import Dataset, DatasetMultiTrial, DatasetMultiTrial_shattered
 from L96_emulator.train import train_model, loss_function
 from configargparse import ArgParser
 import ast
@@ -14,22 +14,25 @@ def mkdir_from_path(dir):
     if not os.path.exists(dir):
         os.mkdir(dir)
 
-def sel_dataset_class(prediction_task,N_trials):
+def sel_dataset_class(prediction_task, N_trials, local):
 
     if prediction_task == 'state' and N_trials==1:
         DatasetClass = Dataset
     elif prediction_task == 'state' and N_trials>1:
-        DatasetClass = DatasetMultiTrial
+        if local:            
+            DatasetClass = DatasetMultiTrial_shattered
+        else:
+            DatasetClass = DatasetMultiTrial
     else:
         raise NotImplementedError()
 
     return DatasetClass
 
 def run_exp(exp_id, datadir, res_dir,
-            K, J, T, N_trials, dt,
+            K, K_local, J, T, N_trials, dt,
             prediction_task, lead_time, seq_length, train_frac, validation_frac, spin_up_time,            
-            model_name, loss_fun, weight_decay, batch_size, max_epochs, eval_every, max_patience,
-            lr, lr_min, lr_decay, max_lr_patience, only_eval, normalize_data, **net_kwargs):
+            model_name, padding_mode, loss_fun, weight_decay, batch_size, max_epochs, eval_every, 
+            max_patience, lr, lr_min, lr_decay, max_lr_patience, only_eval, normalize_data, **net_kwargs):
 
     fetch_commit = subprocess.Popen(['git', 'rev-parse', 'HEAD'], shell=False, stdout=subprocess.PIPE)
     commit_id = fetch_commit.communicate()[0].strip().decode("utf-8")
@@ -44,17 +47,24 @@ def run_exp(exp_id, datadir, res_dir,
     print('data.shape', out.shape)
     assert (out.shape[1]-1)*dt == T
 
-    DatasetClass = sel_dataset_class(prediction_task, N_trials)
+    K_local = K if K_local < 0 else K_local
+    DatasetClass = sel_dataset_class(prediction_task, N_trials, local=(K_local<K))
     test_frac = 1. - (train_frac + validation_frac)
     assert test_frac > 0.
     spin_up = int(spin_up_time/dt)
+    dg_args = {'data' : out,
+               'J' : J, 
+               'offset' : lead_time,
+               'normalize' : bool(normalize_data)}
+    if DatasetClass == DatasetMultiTrial_shattered:
+        dg_args['K_local'] = K_local
 
-    dg_train = DatasetClass(data=out, J=J, offset=lead_time, normalize=bool(normalize_data), 
-                       start=spin_up, 
-                       end=int(np.floor(T/dt*train_frac)))
-    dg_val   = DatasetClass(data=out, J=J, offset=lead_time, normalize=bool(normalize_data), 
-                       start=int(np.ceil(T/dt*train_frac)),
-                       end=int(np.ceil(T/dt*(train_frac+validation_frac))))
+    dg_train = DatasetClass(start=spin_up, 
+                            end=int(np.floor(T/dt*train_frac)),
+                            **dg_args)
+    dg_val   = DatasetClass(start=int(np.ceil(T/dt*train_frac)),
+                            end=int(np.ceil(T/dt*(train_frac+validation_frac)),
+                            **dg_args)
 
     print('N training data:', len(dg_train))
     print('N validation data:', len(dg_val))
@@ -120,6 +130,7 @@ def setup(conf_exp=None):
     p.add_argument('--only_eval', type=bool, default=False, help='if to evaulate saved model (=False for training)')
 
     p.add_argument('--K', type=int, required=True, help='number of slow variables (grid cells)')
+    p.add_argument('--K_local', type=int, default=-1, help='number of slow variables (grid cells) in local training region')
     p.add_argument('--J', type=int, required=True, help='number of fast variables (vertical levels)')
     p.add_argument('--T', type=int, required=True, help='length of simulation data (in time units [s])')
     p.add_argument('--dt', type=float, required=True, help='simulation step length (in time units [s])')
@@ -147,6 +158,7 @@ def setup(conf_exp=None):
     p.add_argument('--max_lr_patience', type=int, default=None, help='patience per learning rate plateau')
         
     p.add_argument('--model_name', type=str, required=True, help='designator for neural network')
+    p.add_argument('--padding_mode', type=str, default='circular', help='designator for padding mode')
     p.add_argument('--filters', type=int, nargs='+', required=True, help='filter count per layer or block')
     p.add_argument('--kernel_sizes', type=int, nargs='+', required=True, help='kernel sizes per layer or block')
     p.add_argument('--filters_ks1_init', type=int, nargs='+', required=False, help='initial 1x1 convs for network')

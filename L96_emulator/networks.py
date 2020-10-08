@@ -16,13 +16,14 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
         n_filters_ks3 = kwargs['filters']
         n_filters_ks1 = [kwargs['filters_ks1_inter'] for i in range(len(n_filters_ks3)-1)]
         n_filters_ks1 = [kwargs['filters_ks1_init']] + n_filters_ks1 + [kwargs['filters_ks1_final']]
+        padding_mode = kwargs['padding_mode']
 
         Network = TinyNetwork if model_name == 'TinyNetwork' else TinyResNet
         model = Network(n_filters_ks3=n_filters_ks3, 
                         n_filters_ks1=n_filters_ks1, 
                         n_channels_in=seq_length * n_input_channels, 
                         n_channels_out=n_output_channels, 
-                        padding_mode='circular')
+                        padding_mode=padding_mode)
 
         def model_forward(input):
             return model.forward(input)
@@ -51,7 +52,7 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
                        n_filters_ks1=n_filters_ks1, 
                        n_channels_in=seq_length * n_input_channels, 
                        n_channels_out=n_output_channels, 
-                       padding_mode='circular',
+                       padding_mode=kwargs['padding_mode'],
                        layerNorm=normLayers[kwargs['layerNorm']],
                        dropout=kwargs['dropout_rate'],
                        additive=additiveResShortcuts,
@@ -93,6 +94,7 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
 
         K, J = kwargs['K_net'], kwargs['J_net'], 
         init, dt = kwargs['init_net'], kwargs['dt_net']
+        padding_mode = kwargs['padding_mode']
 
         F = kwargs['l96_F'] if 'l96_F' in kwargs.keys() else 10.
         h = kwargs['l96_h'] if 'l96_h' in kwargs.keys() else 1.
@@ -103,7 +105,7 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
             ConvNetL96 = MinimalConvNetL96
         if model_name == 'BilinearConvNetL96':
             ConvNetL96 = BilinearConvNetL96
-        model = ConvNetL96(K, J, F=F, b=b, c=c, h=h,init=init)
+        model = ConvNetL96(K, J, F=F, b=b, c=c, h=h,init=init, padding_mode=padding_mode)
 
         model = torch.jit.script(model)
         if kwargs['model_forwarder'] == 'predictor_corrector':
@@ -197,6 +199,13 @@ def setup_conv(in_channels, out_channels, kernel_size, bias, padding_mode, strid
                       bias=bias,
                       stride=stride,
                       padding_mode=padding_mode)
+    elif padding_mode=='valid':
+        return torch.nn.Conv1d(in_channels=in_channels,
+                              out_channels=out_channels,
+                              kernel_size=kernel_size,
+                              padding=0,
+                              stride=stride,
+                              bias=bias)
     else:
         return torch.nn.Conv1d(in_channels=in_channels,
                               out_channels=out_channels,
@@ -709,7 +718,7 @@ class AnalyticConvModel_twoLevel(AnalyticConvModel_oneLevel):
 
 class MinimalConvNetL96(torch.nn.Module):
 
-    def __init__(self, K, J=0, F=10., b=10., c=10., h=1., init='rand'):
+    def __init__(self, K, J=0, F=10., b=10., c=10., h=1., init='rand', padding_mode='circular'):
         
         super(MinimalConvNetL96, self).__init__()
             
@@ -717,13 +726,13 @@ class MinimalConvNetL96(torch.nn.Module):
                                  out_channels = 3*(J+1), 
                                  kernel_size = 5 if J == 1 else 4, 
                                  bias = True, 
-                                 padding_mode='circular', 
+                                 padding_mode=padding_mode, 
                                  stride=1)
         self.layer2 = setup_conv(in_channels = 4*(J+1), 
                                  out_channels = J+1, 
                                  kernel_size = 1, 
                                  bias = True, 
-                                 padding_mode='circular', 
+                                 padding_mode=padding_mode, 
                                  stride=1)
 
         self.nonlinearity = _pointwise_square
@@ -779,7 +788,7 @@ class AnalyticBilinearConvModel_oneLevel():
 
 class BilinearConvNetL96(torch.nn.Module):
 
-    def __init__(self, K, J=0, F=10., b=10., c=10., h=1., init='rand'):
+    def __init__(self, K, J=0, F=10., b=10., c=10., h=1., init='rand', padding_mode='circular'):
         
         super(BilinearConvNetL96, self).__init__()
             
@@ -787,7 +796,7 @@ class BilinearConvNetL96(torch.nn.Module):
                                  out_channels = 3*(J+1), 
                                  kernel_size = 5 if J == 1 else 4, 
                                  bias = True, 
-                                 padding_mode='circular', 
+                                 padding_mode=padding_mode, 
                                  stride=1)
         
         self.layer2 = torch.nn.Bilinear(in1_features = 1*(J+1), 
@@ -801,7 +810,7 @@ class BilinearConvNetL96(torch.nn.Module):
                                  out_channels = J+1, 
                                  kernel_size = 1, 
                                  bias = True, 
-                                 padding_mode='circular', 
+                                 padding_mode=padding_mode, 
                                  stride=1)
 
         self.nonlinearity = torch.nn.Identity()
