@@ -49,6 +49,7 @@ def load_model_from_exp_conf(res_dir, conf):
             'init_net' : conf['init_net'], 
             'K_net' : conf['K_net'], 
             'J_net' : conf['J_net'], 
+            'F_net' : conf['F_net'],
             'dt_net' : conf['dt_net'], 
             'alpha_net' : conf['alpha_net'],
             'model_forwarder' : conf['model_forwarder'],

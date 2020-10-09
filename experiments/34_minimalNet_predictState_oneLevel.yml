@@ -33,6 +33,7 @@ padding_mode: circular
 init_net: analytical
 K_net: 40
 J_net: 0
+F_net: 8.
 model_forwarder: rk4_default
 n_local: 1
 dt_net: 0.05
