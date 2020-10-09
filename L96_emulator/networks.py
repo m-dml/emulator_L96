@@ -66,10 +66,10 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
         K, J = kwargs['K_net'], kwargs['J_net'], 
         init, dt, alpha = kwargs['init_net'], kwargs['dt_net'], kwargs['alpha_net']
 
-        F = kwargs['l96_F'] if 'l96_F' in kwargs.keys() else 10.
-        h = kwargs['l96_h'] if 'l96_h' in kwargs.keys() else 1.
-        b = kwargs['l96_b'] if 'l96_b' in kwargs.keys() else 10.
-        c = kwargs['l96_c'] if 'l96_c' in kwargs.keys() else 10.
+        F = kwargs['F_net'] if 'F_net' in kwargs.keys() else 10.
+        h = kwargs['h_net'] if 'h_net' in kwargs.keys() else 1.
+        b = kwargs['b_net'] if 'b_net' in kwargs.keys() else 10.
+        c = kwargs['c_net'] if 'c_net' in kwargs.keys() else 10.
 
         model = MinimalNetL96(K,J, F=F, b=b,c=c,h=h,
                              skip_conn=True, init=init)
@@ -96,10 +96,10 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
         init, dt = kwargs['init_net'], kwargs['dt_net']
         padding_mode = kwargs['padding_mode']
 
-        F = kwargs['l96_F'] if 'l96_F' in kwargs.keys() else 10.
-        h = kwargs['l96_h'] if 'l96_h' in kwargs.keys() else 1.
-        b = kwargs['l96_b'] if 'l96_b' in kwargs.keys() else 10.
-        c = kwargs['l96_c'] if 'l96_c' in kwargs.keys() else 10.
+        F = kwargs['F_net'] if 'F_net' in kwargs.keys() else 10.
+        h = kwargs['h_net'] if 'h_net' in kwargs.keys() else 1.
+        b = kwargs['b_net'] if 'b_net' in kwargs.keys() else 10.
+        c = kwargs['c_net'] if 'c_net' in kwargs.keys() else 10.
 
         if model_name == 'MinimalConvNetL96':
             ConvNetL96 = MinimalConvNetL96
