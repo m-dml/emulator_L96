@@ -25,7 +25,7 @@ weight_decay: 0.
 max_lr_patience: 10
 max_patience: 50
 eval_every: 2000
-max_epochs: 1.
+max_epochs: 1
 model_name: BilinearConvNetL96
 filters: [0]
 kernel_sizes: [4]
