@@ -31,7 +31,7 @@ def sel_dataset_class(prediction_task, N_trials, local):
 def run_exp(exp_id, datadir, res_dir,
             K, K_local, J, T, N_trials, dt, n_local,
             prediction_task, lead_time, seq_length, train_frac, validation_frac, spin_up_time,            
-            model_name, loss_fun, weight_decay, batch_size, max_epochs, eval_every, 
+            model_name, loss_fun, weight_decay, batch_size, batch_size_eval, max_epochs, eval_every, 
             max_patience, lr, lr_min, lr_decay, max_lr_patience, only_eval, normalize_data, **net_kwargs):
 
     fetch_commit = subprocess.Popen(['git', 'rev-parse', 'HEAD'], shell=False, stdout=subprocess.PIPE)
@@ -70,8 +70,9 @@ def run_exp(exp_id, datadir, res_dir,
     print('N training data:', len(dg_train))
     print('N validation data:', len(dg_val))
 
+    batch_size_eval = batch_size if batch_size_eval < 1 else batch_size_eval
     validation_loader = torch.utils.data.DataLoader(
-        dg_val, batch_size=batch_size, drop_last=False, num_workers=0 
+        dg_val, batch_size=batch_size_eval, drop_last=False, num_workers=0 
     )
     train_loader = torch.utils.data.DataLoader(
         dg_train, batch_size=batch_size, drop_last=True, num_workers=0
@@ -161,6 +162,7 @@ def setup(conf_exp=None):
 
     p.add_argument('--loss_fun', type=str, default='mse', help='loss function for model training')
     p.add_argument('--batch_size', type=int, default=32, help='batch-size')
+    p.add_argument('--batch_size_eval', type=int, default=-1, help='batch-size for evaluation dataset')
     p.add_argument('--max_epochs', type=int, default=2000, help='epochs')
     p.add_argument('--max_patience', type=int, default=None, help='patience for early stopping')
     p.add_argument('--eval_every', type=int, default=None, help='frequency for checking convergence (in minibatches)')
