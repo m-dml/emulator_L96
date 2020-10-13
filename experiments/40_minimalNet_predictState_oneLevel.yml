@@ -16,6 +16,7 @@ spin_up_time: 5.
 loss_fun: local_mse
 K_local: 1
 batch_size: 1
+batch_size_eval: 64
 dropout_rate: 0.0
 layerNorm: BN
 lr: 1e-3
