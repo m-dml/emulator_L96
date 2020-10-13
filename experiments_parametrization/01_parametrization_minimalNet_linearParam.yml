@@ -1,9 +1,9 @@
 exp_id: parametrization_minimalNet_linearParam
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
-K: 40
-J: 0
-T: 505
+K: 36
+J: 10
+T: 10
 dt: 0.001
 l96_F: 10.
 l96_h: 1.

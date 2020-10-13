@@ -1,9 +1,9 @@
 import numpy as np
 import torch
-from L96_emulator.util import sortL96fromChannels, sortL96intoChannels
-from L96_emulator.data_assimilation import get_model
+from L96_emulator.util import device, as_tensor, dtype_np, dtype
+from L96_emulator.util import sortL96intoChannels, sortL96fromChannels, rk4_default
 from L96_emulator.parametrization import Parametrization_lin, Parametrized_twoLevel_L96
-from L96_emulator.util import as_tensor, sortL96intoChannels, sortL96fromChannels
+from L96_emulator.data_assimilation import get_model
 from L96_emulator.networks import Model_forwarder_rk4default
 from L96_emulator.run import sel_dataset_class, loss_function
 from L96_emulator.train import train_model
@@ -48,10 +48,10 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
         param_train = Parametrization_lin(a=as_tensor(np.array([-0.75])), b=as_tensor(np.array([-0.4])))    
     else:
         raise NotImplementedError()
-    for p in model.emulator.parameters():
+    for p in model.parameters():
         p.requires_grad = False
     model_parametrized = Parametrized_twoLevel_L96(emulator=model, parametrization=param_train)
-    model_forwarder_parametrized = Model_forwarder_rk4default(model=model_parametrized_ dt=dt)
+    model_forwarder_parametrized = Model_forwarder_rk4default(model=model_parametrized, dt=dt)
 
     print('torch.nn.Parameters of parametrization require grad: ')
     for p in model_forwarder_parametrized.model.param.parameters():
@@ -77,7 +77,7 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
             self.fun = fun
         def forward(self, x):
             x = sortL96fromChannels(x.detach().cpu().numpy()).flatten()
-            return sortL96intoChannels(np.atleast_2d(self.fun(0., x)), J=J)
+            return as_tensor(sortL96intoChannels(np.atleast_2d(self.fun(0., x)), J=J))
     model_forwarder_np = Model_forwarder_rk4default(Torch_solver(fun), dt=dt)
 
 
@@ -95,10 +95,13 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
         return x
 
     T_dur = int(T/dt)
+    print('simulating high-res (two-level L96) data')
     data_full = model_simulate(y0=sortL96intoChannels(X_init,J=J), dy0=None, n_steps=T_dur)
+    print('full data shape: ', data_full.shape)
 
     # two-level simulates for fast and slow variables, we only take the slow ones for training !
     data = data_full[:,0,:] 
+    print('training data shape: ', data_full.shape)
 
     train_frac, validation_frac = 0.8,  0.1    
     DatasetClass = sel_dataset_class(prediction_task='state', N_trials=1, local=False)
@@ -107,7 +110,7 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     
     dg_dict = {
         'data' : data,
-        'J' = 0,
+        'J' : 0,
         'offset' : 1,
         'normalize' : False
     }
@@ -124,6 +127,7 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     )
 
     loss_fun = loss_function(loss_fun=loss_fun, extra_args={})
+    print('starting optimization of parametrization')
     training_outputs = train_model(
         model=model_forwarder_parametrized,
         train_loader=train_loader, 
@@ -155,10 +159,8 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
             {
                 'data_full' : data_full,
                 'X_init' : data_full[-1].reshape(1,-1),
-                'param_train_state_dict', param_train.state_dict(),
+                'param_train_state_dict' : param_train.state_dict()
             })
-
-    print('x_sols.shape', x_sols.shape)
     print('done')
 
 
@@ -185,6 +187,7 @@ def setup_parametrization(conf_exp=None):
 
     p.add_argument('--model_exp_id', type=int, required=True, help='exp_id for emulator-training experiment')
     p.add_argument('--model_forwarder', type=str, default='rk4_default', help='string for model forwarder (e.g. RK4)')
+    p.add_argument('--parametrization', type=str, default='linear', help='string specifying parametrization model')
 
     p.add_argument('--loss_fun', type=str, default='mse', help='loss function for model training')    
     p.add_argument('--batch_size', type=int, default=32, help='batch-size')
@@ -195,6 +198,7 @@ def setup_parametrization(conf_exp=None):
     p.add_argument('--lr_min', type=float, default=1e-6, help='minimal learning rate after which stop reducing')
     p.add_argument('--lr_decay', type=float, default=0.1, help='learning rate decay factor')
     p.add_argument('--max_lr_patience', type=int, default=None, help='patience per learning rate plateau')
+    p.add_argument('--weight_decay', type=float, default=0., help='weight decay (L2 norm)')
 
     args = p.parse_args() if conf_exp is None else p.parse_args(args=[])
     return vars(args)
