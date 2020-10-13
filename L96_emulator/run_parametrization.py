@@ -152,14 +152,16 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     mkdir_from_path(res_dir + save_dir)
 
     open(res_dir + save_dir + commit_id + '.txt', 'w')
-    fn = save_dir + 'res'
-
+    
+    state_dict = param_train.state_dict()
+    for key, value in state_dict.items():
+        state_dict[key] = value.detach().cpu().numpy()
 
     np.save(res_dir + save_dir + 'out', 
             {
                 'data_full' : data_full,
                 'X_init' : data_full[-1].reshape(1,-1),
-                'param_train_state_dict' : param_train.state_dict()
+                'param_train_state_dict' : state_dict
             })
     print('done')
 
