@@ -168,7 +168,7 @@ def optim_initial_state(
             time_vals[j*n_steps+np.arange(n_steps),0] -= top_old
             time_vals[j*n_steps+np.arange(n_steps),0] += time_vals[j*n_steps-1,0]
         top_old = top_new             
-                
+
     return x_sols, loss_vals, time_vals, state_mses
 
 
