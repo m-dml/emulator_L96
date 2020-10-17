@@ -50,7 +50,7 @@ def run_exp(exp_id, datadir, res_dir,
     K_local = K if K_local < 0 else K_local
     DatasetClass = sel_dataset_class(prediction_task, N_trials, local=(K_local<K))
     test_frac = 1. - (train_frac + validation_frac)
-    assert test_frac > 0.
+    assert test_frac >= 0.
     spin_up = int(spin_up_time/dt)
     dg_args = {'data' : out,
                'J' : J, 
