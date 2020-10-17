@@ -77,6 +77,36 @@ def rk4_default(fun, y0, times):
         
     return y
 
+def calc_jakobian_onelevelL96_tendencies(inputs, n):
+
+    inputs_m1 = np.concatenate((inputs[-1:], inputs[:-1]))
+    inputs_m2 = np.concatenate((inputs[-2:], inputs[:-2]))
+    inputs_p1 = np.concatenate((inputs[1:], inputs[:1]))
+
+    dfdx = - 1. * np.eye(n) 
+    dfdx += np.diag(inputs_m1[:-1], 1) + np.diag(inputs_m1[-1:], -n+1)
+    dfdx -= np.diag(inputs_p1[:-2],-2) + np.diag(inputs_p1[-2:], n-2)
+    dfdx += np.diag(inputs_p1[1:]-inputs_m2[1:],-1) + np.diag(inputs_p1[:1]-inputs_m2[:1], n-1)
+
+    return dfdx
+
+def calc_jakobian_rk4(inputs, calc_f, calc_J_f, dt, n):
+
+    I = np.eye(n)
+    
+    f0 = calc_f(inputs)
+    f1 = calc_f(inputs + dt/2. * f0)
+    f2 = calc_f(inputs + dt/2. * f1)
+
+    J0 = calc_J_f(inputs=inputs,          n=n)
+    J1 = calc_J_f(inputs=inputs+dt/2.*f0, n=n).dot(dt/2*J0+I)    
+    J2 = calc_J_f(inputs=inputs+dt/2.*f1, n=n).dot(dt/2*J1+I)    
+    J3 = calc_J_f(inputs=inputs+dt   *f2, n=n).dot(dt*J2+I)
+
+    J = np.eye(n) + dt/6. * (J0 + 2 * J1 + 2 * J2 + J3)
+
+    return J 
+
 def get_data(K, J, T, dt, N_trials=1, F=10., h=1., b=10., c=10., 
              resimulate=True, solver=rk4_default, save_sim=False, data_dir=None):
 
