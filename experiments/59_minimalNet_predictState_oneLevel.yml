@@ -1,4 +1,4 @@
-exp_id: minimalNet_predictState_J_initRand_RK_multiTrial_thorough_local40_bs4
+exp_id: minimalNet_predictState_J_initRand_RK_multiTrial_thorough_local40_bs16
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
 K: 640
@@ -15,7 +15,7 @@ validation_frac: 0.2
 spin_up_time: 5.
 loss_fun: local_mse
 K_local: 40
-batch_size: 4
+batch_size: 16
 batch_size_eval: 128
 dropout_rate: 0.0
 layerNorm: BN
@@ -25,7 +25,7 @@ lr_decay: 0.1
 weight_decay: 0.
 max_lr_patience: 20
 max_patience: 50
-eval_every: 4000
+eval_every: 2000
 max_epochs: 5000
 model_name: MinimalConvNetL96
 filters: [0]
