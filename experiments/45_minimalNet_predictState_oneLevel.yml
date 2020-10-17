@@ -13,8 +13,8 @@ seq_length: 1
 train_frac: 0.8
 validation_frac: 0.2
 spin_up_time: 5.
-loss_fun: local_mse
-K_local: 640
+loss_fun: mse
+K_local: -1
 batch_size: 32
 batch_size_eval: 128
 dropout_rate: 0.0
@@ -30,10 +30,10 @@ max_epochs: 5000
 model_name: MinimalConvNetL96
 filters: [0]
 kernel_sizes: [4]
-padding_mode: valid
+padding_mode: circular
 init_net: rand
 K_net: 640
 J_net: 0
 model_forwarder: rk4_default
-n_local: 4
+n_local: -1
 dt_net: 0.05
