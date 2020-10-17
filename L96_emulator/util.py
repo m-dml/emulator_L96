@@ -83,7 +83,7 @@ def calc_jakobian_onelevelL96_tendencies(inputs, n):
     inputs_m2 = np.concatenate((inputs[-2:], inputs[:-2]))
     inputs_p1 = np.concatenate((inputs[1:], inputs[:1]))
 
-    dfdx = - 1. * np.eye(n) 
+    dfdx = - 1. * np.eye(n, dtype=dtype_np)
     dfdx += np.diag(inputs_m1[:-1], 1) + np.diag(inputs_m1[-1:], -n+1)
     dfdx -= np.diag(inputs_p1[:-2],-2) + np.diag(inputs_p1[-2:], n-2)
     dfdx += np.diag(inputs_p1[1:]-inputs_m2[1:],-1) + np.diag(inputs_p1[:1]-inputs_m2[:1], n-1)
@@ -92,20 +92,30 @@ def calc_jakobian_onelevelL96_tendencies(inputs, n):
 
 def calc_jakobian_rk4(inputs, calc_f, calc_J_f, dt, n):
 
-    I = np.eye(n)
+    I = np.eye(n, dtype=dtype_np)
     
     f0 = calc_f(inputs)
     f1 = calc_f(inputs + dt/2. * f0)
     f2 = calc_f(inputs + dt/2. * f1)
 
     J0 = calc_J_f(inputs=inputs,          n=n)
-    J1 = calc_J_f(inputs=inputs+dt/2.*f0, n=n).dot(dt/2*J0+I)    
-    J2 = calc_J_f(inputs=inputs+dt/2.*f1, n=n).dot(dt/2*J1+I)    
+    J1 = calc_J_f(inputs=inputs+dt/2.*f0, n=n).dot(dt/2*J0+I)
+    J2 = calc_J_f(inputs=inputs+dt/2.*f1, n=n).dot(dt/2*J1+I)
     J3 = calc_J_f(inputs=inputs+dt   *f2, n=n).dot(dt*J2+I)
 
-    J = np.eye(n) + dt/6. * (J0 + 2 * J1 + 2 * J2 + J3)
+    J = I + dt/6. * (J0 + 2 * J1 + 2 * J2 + J3)
 
     return J 
+
+def get_jacobian_torch(model, inputs, n):
+    J = np.zeros((n,n), dtype=dtype_np)
+    for i in range(n):
+        inputs.grad = None
+        L = model(inputs).flatten()[i]
+        L.backward()
+        J[i,:] = inputs.grad.detach().cpu().numpy()
+    return J
+
 
 def get_data(K, J, T, dt, N_trials=1, F=10., h=1., b=10., c=10., 
              resimulate=True, solver=rk4_default, save_sim=False, data_dir=None):
