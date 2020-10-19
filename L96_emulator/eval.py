@@ -71,6 +71,8 @@ def load_model_from_exp_conf(res_dir, conf):
     lead_time, exp_id = conf['lead_time'], conf['exp_id']
     save_dir = res_dir + 'models/' + exp_id + '/'
     model_fn = f'{exp_id}_dt{lead_time}.pt'
+    
+    print('save_dir + model_fn', save_dir + model_fn)
     model.load_state_dict(torch.load(save_dir + model_fn, map_location=torch.device(device)))
     
     try: 

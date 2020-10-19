@@ -88,7 +88,10 @@ def run_exp(exp_id, datadir, res_dir,
                                          n_output_channels=J+1,
                                          seq_length=seq_length,
                                          **net_kwargs)
-    print('model.layer1.weights', model.layer1.weight.shape)
+    try:
+        print('model.layer1.weights', model.layer1.weight.shape)
+    except:
+        pass
     if K_local < K:
         test_input = np.random.normal(size=(10, seq_length*(J+1), K_local + 3*n_local))
     else:

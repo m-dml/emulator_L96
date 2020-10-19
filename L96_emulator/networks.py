@@ -15,8 +15,13 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
 
         n_filters_ks3 = kwargs['filters']
         n_filters_ks1 = [kwargs['filters_ks1_inter'] for i in range(len(n_filters_ks3)-1)]
-        n_filters_ks1 = [kwargs['filters_ks1_init']] + n_filters_ks1 + [kwargs['filters_ks1_final']]
+        n_filters_ks1 = n_filters_ks1 + [kwargs['filters_ks1_final']]
+        if kwargs['filters_ks1_init'] is None:
+            n_filters_ks1 = [[]] + n_filters_ks1
+        else:
+            n_filters_ks1 = [kwargs['filters_ks1_init']] + n_filters_ks1
         padding_mode = kwargs['padding_mode']
+        dt = kwargs['dt_net']
 
         Network = TinyNetwork if model_name == 'TinyNetwork' else TinyResNet
         model = Network(n_filters_ks3=n_filters_ks3, 
@@ -25,10 +30,14 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
                         n_channels_out=n_output_channels, 
                         padding_mode=padding_mode)
 
-        def model_forward(input):
-            return model.forward(input)
+        #model = torch.jit.script(model)
+        if kwargs['model_forwarder'] == 'predictor_corrector':
+            alpha = kwargs['alpha_net']
+            model_forwarder = Model_forwarder_predictorCorrector(model, dt=dt, alpha=alpha)
+        elif kwargs['model_forwarder'] == 'rk4_default':
+            model_forwarder = Model_forwarder_rk4default(model, dt=dt)
 
-    if model_name == 'ResNet':
+    elif model_name == 'ResNet':
 
         assert seq_length == 1
         assert np.all([i == 3 for i in kwargs['kernel_sizes']])
@@ -107,17 +116,18 @@ def named_network(model_name, n_input_channels, n_output_channels, seq_length, *
             ConvNetL96 = BilinearConvNetL96
         model = ConvNetL96(K, J, F=F, b=b, c=c, h=h,init=init, padding_mode=padding_mode)
 
-        model = torch.jit.script(model)
+        #model = torch.jit.script(model)
         if kwargs['model_forwarder'] == 'predictor_corrector':
             alpha = kwargs['alpha_net']
             model_forwarder = Model_forwarder_predictorCorrector(model, dt=dt, alpha=alpha)
         elif kwargs['model_forwarder'] == 'rk4_default':
             model_forwarder = Model_forwarder_rk4default(model, dt=dt)
+        #model_forwarder = torch.jit.script(model_forwarder)
 
     else: 
         raise NotImplementedError()
 
-    return model, torch.jit.script(model_forwarder)
+    return model, model_forwarder
 
 
 class Model_forwarder_resolvent(torch.nn.Module):
