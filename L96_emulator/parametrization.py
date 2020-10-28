@@ -27,3 +27,29 @@ class Parametrization_lin(torch.nn.Module):
     def forward(self, x):
         
         return self.a * x  + self.b
+
+class Parametrization_nn(torch.nn.Module):
+    
+    def __init__(self, n_hiddens, n_in=1, n_out=1):
+
+        super(Parametrization_nn, self).__init__()
+
+        layers = []
+        n_units = n_hiddens + [n_out]
+        for n in n_units:
+            layers.append(
+                torch.nn.Conv1d(n_in, n, kernel_size=1, bias=True)
+                #torch.nn.Linear(n_in, n, bias=True)
+            )
+            n_in = n
+        self.layers = torch.nn.ModuleList(layers)
+
+        self.nonlinearity = torch.nn.ReLU()
+
+    def forward(self, x):
+        
+        for i,layer in enumerate(self.layers):
+            x = layer(x)
+            x = self.nonlinearity(x) if i < len(self.layers)-1 else x
+
+        return x
