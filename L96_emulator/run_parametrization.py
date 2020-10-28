@@ -18,7 +18,7 @@ def mkdir_from_path(dir):
         os.mkdir(dir)
 
 def run_exp_parametrization(exp_id, datadir, res_dir,
-            parametrization,
+            parametrization, n_hiddens,
             K, J, T, dt, spin_up_time, l96_F, l96_h, l96_b, l96_c, train_frac, validation_frac,
             model_exp_id, model_forwarder, loss_fun, batch_size, eval_every,
             lr, lr_min, lr_decay, weight_decay, max_epochs, max_patience, max_lr_patience):
@@ -46,6 +46,9 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     # instantiate parametrizations
     if parametrization == 'linear':
         param_train = Parametrization_lin(a=as_tensor(np.array([-0.75])), b=as_tensor(np.array([-0.4])))    
+        param_train = Parametrization_lin(a=as_tensor(np.array([-0.75])), b=as_tensor(np.array([-0.4])))    
+    elif parametrization == 'nn':
+        param_train = Parametrization_nn(n_hiddens=n_hiddens)    
     else:
         raise NotImplementedError()
     for p in model.parameters():
@@ -60,8 +63,11 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     for p in model_forwarder_parametrized.model.emulator.parameters():
         print(p.requires_grad)
 
-    print('initialized a', model_parametrized.param.a)
-    print('initialized b', model_parametrized.param.b)    
+    if parametrization == 'linear':
+        print('initialized a', model_parametrized.param.a)
+        print('initialized b', model_parametrized.param.b)    
+    elif parametrization == 'nn':
+        print('initialized first-layer weights', model_parametrized.param.layers[0].weight)
     
     # ground-truth two-level L96 model (based on Numba implementation):
     dX_dt = np.empty(K*(J+1), dtype=dtype_np)
@@ -145,8 +151,11 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
         eval_every=eval_every
     )
 
-    print('learned a', model_parametrized.param.a)
-    print('learned b', model_parametrized.param.b)
+    if parametrization == 'linear':
+        print('learned a', model_parametrized.param.a)
+        print('learned b', model_parametrized.param.b)
+    elif parametrization == 'nn':
+        print('initialized first-layer weights', model_parametrized.param.layers[0].weight)
 
     save_dir = 'results/parametrization/' + exp_id + '/'
     mkdir_from_path(res_dir + save_dir)
@@ -190,6 +199,7 @@ def setup_parametrization(conf_exp=None):
     p.add_argument('--model_exp_id', type=int, required=True, help='exp_id for emulator-training experiment')
     p.add_argument('--model_forwarder', type=str, default='rk4_default', help='string for model forwarder (e.g. RK4)')
     p.add_argument('--parametrization', type=str, default='linear', help='string specifying parametrization model')
+    p.add_argument('--n_hiddens', type=int, nargs='+',  default=[32,32], help='string specifying layers of NN parametrization')
 
     p.add_argument('--loss_fun', type=str, default='mse', help='loss function for model training')    
     p.add_argument('--batch_size', type=int, default=32, help='batch-size')
