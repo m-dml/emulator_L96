@@ -145,6 +145,18 @@ class Model_forwarder_resolvent(torch.nn.Module):
         return self.model.forward(x)
 
 
+class Model_forwarder_forwardEuler(torch.nn.Module):
+
+    def __init__(self, model, dt):
+        super(Model_forwarder_forwardEuler, self).__init__()            
+        self.dt = dt
+        self.add_module('model', module=model)
+
+    def forward(self, x):
+        """ forward Euler step """
+        return x + self.dt * self.model.forward(x)
+
+
 class Model_forwarder_predictorCorrector(torch.nn.Module):
 
     def __init__(self, model, dt, alpha=0.5):
