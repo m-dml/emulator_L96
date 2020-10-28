@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from L96_emulator.util import device, as_tensor, dtype_np, dtype
 from L96_emulator.util import sortL96intoChannels, sortL96fromChannels, rk4_default
-from L96_emulator.parametrization import Parametrization_lin, Parametrized_twoLevel_L96
+from L96_emulator.parametrization import Parametrization_lin, Parametrization_nn, Parametrized_twoLevel_L96
 from L96_emulator.data_assimilation import get_model
 from L96_emulator.networks import Model_forwarder_rk4default
 from L96_emulator.run import sel_dataset_class, loss_function
