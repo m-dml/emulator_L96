@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from L96_emulator.util import sortL96intoChannels
+from L96_emulator.util import sortL96intoChannels, as_tensor
 
 class Dataset(torch.utils.data.IterableDataset):
     def __init__(self, data, offset=1, J=0,
@@ -57,6 +57,32 @@ class Dataset(torch.utils.data.IterableDataset):
             raise NotImplementedError('had no need for parallelization yet')
 
         return iter_start, iter_end
+
+
+class DatasetMultiStep(Dataset):
+    def __init__(self, data, offset=1, J=0,
+                 start=None, end=None, 
+                 normalize=False, randomize_order=True):
+
+        super(DatasetMultiStep, self).__init__(
+                 data=data, offset=offset, J=J, start=start, end=end, 
+                 normalize=normalize, randomize_order=randomize_order
+        )
+        self.offset = torch.as_tensor(np.asarray(offset, dtype=np.int).reshape(1,-1), device='cpu')
+
+    def __iter__(self):
+        """ Return iterable over data in random order """
+        iter_start, iter_end = self.divide_workers()
+        if self.randomize_order:
+            idx = torch.randperm(iter_end - iter_start, device='cpu') + iter_start
+        else: 
+            idx = torch.arange(iter_start, iter_end, requires_grad=False, device='cpu')
+        io = (idx.reshape(-1,1) + self.offset.reshape(1,-1)).flatten()
+            
+        X = self.data[idx].reshape(-1,self.J+1,self.K) # reshapes time x n_trials into single axis !
+        y = self.data[io].reshape(-1, np.prod(self.offset.shape), self.J+1,self.K)
+
+        return zip(X, y)
 
 
 class DatasetMultiTrial(Dataset):
@@ -162,6 +188,34 @@ class DatasetMultiTrial_shattered(DatasetMultiTrial):
 
     def __len__(self):
         return self.l_regs * self.N * (self.end - self.start)
+
+
+class DatasetMultiTrialMultiStep(DatasetMultiTrial):
+    def __init__(self, data, offset=1, J=0,
+                 start=None, end=None, 
+                 normalize=False, randomize_order=True):
+
+        super(DatasetMultiTrialMultiStep, self).__init__(
+                 data=data, offset=offset, J=J, start=start, end=end, 
+                 normalize=normalize, randomize_order=randomize_order
+        )
+        self.offset = torch.as_tensor(np.asarray(offset, dtype=np.int).reshape(1,-1), device='cpu')
+
+    def __iter__(self):
+        """ Return iterable over data in random order """
+        iter_start, iter_end = self.divide_workers()
+        if self.randomize_order:
+            idx = [torch.randperm(iter_end - iter_start, device='cpu') for j in range(self.N)]
+            idx = torch.cat([j*self.T + iter_start + idx[j] for j in range(len(idx))])
+        else:
+            idx = [torch.arange(iter_start, iter_end, requires_grad=False, device='cpu') for j in range(self.N)]
+            idx = torch.cat([j*self.T + idx[j] for j in range(len(idx))])
+        io = (idx.reshape(-1,1) + self.offset.reshape(1,-1)).flatten()
+            
+        X = self.data[idx].reshape(-1,self.J+1,self.K) # reshapes time x n_trials into single axis !
+        y = self.data[io].reshape(-1, np.prod(self.offset.shape), self.J+1,self.K)
+
+        return zip(X, y)
 
 
 class DatasetRelPred(Dataset):
