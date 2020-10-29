@@ -7,6 +7,7 @@ from L96_emulator.data_assimilation import get_model
 from L96_emulator.networks import Model_forwarder_rk4default
 from L96_emulator.run import sel_dataset_class, loss_function
 from L96_emulator.train import train_model
+from L96_emulator.likelihood import GenModel, ObsOp_identity, SimplePrior
 from L96sim.L96_base import f1, f2, pf2
 from configargparse import ArgParser
 import subprocess
@@ -19,7 +20,7 @@ def mkdir_from_path(dir):
 
 def run_exp_parametrization(exp_id, datadir, res_dir,
             parametrization, n_hiddens,
-            K, J, T, dt, spin_up_time, l96_F, l96_h, l96_b, l96_c, train_frac, validation_frac,
+            K, J, T, dt, spin_up_time, l96_F, l96_h, l96_b, l96_c, train_frac, validation_frac, offset,
             model_exp_id, model_forwarder, loss_fun, batch_size, eval_every,
             lr, lr_min, lr_decay, weight_decay, max_epochs, max_patience, max_lr_patience):
 
@@ -62,6 +63,22 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     print('torch.nn.Parameters of emulator require grad: ')
     for p in model_forwarder_parametrized.model.emulator.parameters():
         print(p.requires_grad)
+
+    if len(offset)>1: # multi-step predictions
+        print('multi-step predictions')
+        gm = GenModel(model_forwarder=model_forwarder_parametrized, 
+                      model_observer=ObsOp_identity(), 
+                      prior=SimplePrior(J=0, K=K))
+        class MultiStepForwarder(torch.nn.Module):
+            def __init__(self, model, offset):
+                super(MultiStepForwarder, self).__init__()
+                self.model = model
+                self.offset = offset
+            def forward(self, x):
+                return torch.stack(gm._forward(x=x, T_obs=self.offset), dim=1)
+            
+        model_forwarder_parametrized = MultiStepForwarder(model=gm, offset=np.asarray(offset))
+        print('model forwarder', model_forwarder_parametrized)
 
     if parametrization == 'linear':
         print('initialized a', model_parametrized.param.a)
@@ -110,14 +127,16 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     print('training data shape: ', data_full.shape)
 
     train_frac, validation_frac = 0.8,  0.1    
-    DatasetClass = sel_dataset_class(prediction_task='state', N_trials=1, local=False)
+    DatasetClass = sel_dataset_class(prediction_task='state', N_trials=1, local=False, offset=offset)
+    print('dataset class', DatasetClass)
+    print('len(offset)', len(offset))
     assert train_frac + validation_frac <= 1.
     spin_up = int(spin_up_time/dt)
     
     dg_dict = {
         'data' : data,
         'J' : 0,
-        'offset' : 1,
+        'offset' : offset[0] if len(offset)==1 else offset,
         'normalize' : False
     }
 
@@ -190,6 +209,7 @@ def setup_parametrization(conf_exp=None):
     p.add_argument('--spin_up_time', type=float, default=5., help='spin-up time for simulation in [s]')
     p.add_argument('--train_frac', type=float, default=0.8, help='fraction of data data for training')
     p.add_argument('--validation_frac', type=float, default=0.1, help='fraction of data for validation')
+    p.add_argument('--offset', type=int, nargs='+', default=[1], help='time offset for prediction (can be list)')
 
     p.add_argument('--l96_F', type=float, default=10., help='Lorenz-96 parameter F')
     p.add_argument('--l96_h', type=float, default=1., help='Lorenz-96 parameter h')

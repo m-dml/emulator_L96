@@ -3,6 +3,7 @@ import torch
 from L96_emulator.util import init_torch_device, device, as_tensor
 from L96_emulator.networks import named_network
 from L96_emulator.dataset import Dataset, DatasetMultiTrial, DatasetMultiTrial_shattered
+from L96_emulator.dataset import DatasetMultiStep, DatasetMultiTrialMultiStep
 from L96_emulator.train import train_model, loss_function
 from configargparse import ArgParser
 import ast
@@ -14,15 +15,26 @@ def mkdir_from_path(dir):
     if not os.path.exists(dir):
         os.mkdir(dir)
 
-def sel_dataset_class(prediction_task, N_trials, local):
+def sel_dataset_class(prediction_task, N_trials, local, offset=1):
 
-    if prediction_task == 'state' and N_trials==1:
-        DatasetClass = Dataset
-    elif prediction_task == 'state' and N_trials>1:
-        if local:            
-            DatasetClass = DatasetMultiTrial_shattered
+    assert prediction_task in ['state']
+    if N_trials==1:
+        if len(offset) > 1:
+            DatasetClass = DatasetMultiStep
         else:
-            DatasetClass = DatasetMultiTrial
+            DatasetClass = Dataset
+
+    elif N_trials>1:
+        if local:
+            if len(offset) > 1:
+                raise NotImplementedError()
+            else:
+                DatasetClass = DatasetMultiTrial_shattered
+        else:
+            if len(offset) > 1:
+                DatasetClass = DatasetMultiTrialMultiStep                
+            else:
+                DatasetClass = DatasetMultiTrial
     else:
         raise NotImplementedError()
 
