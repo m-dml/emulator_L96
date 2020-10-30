@@ -127,7 +127,6 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     data = data_full[:,0,:] 
     print('training data shape: ', data_full.shape)
 
-    train_frac, validation_frac = 0.8,  0.1    
     DatasetClass = sel_dataset_class(prediction_task='state', N_trials=1, local=False, offset=offset)
     print('dataset class', DatasetClass)
     print('len(offset)', len(offset))
