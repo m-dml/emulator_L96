@@ -141,12 +141,14 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     }
 
     dg_train = DatasetClass(start=spin_up, end=spin_up+int(np.floor(T_dur*train_frac))-np.max(offset), **dg_dict)
+    print('len dg_train', len(dg_train))
     train_loader = torch.utils.data.DataLoader(
         dg_train, batch_size=batch_size, drop_last=True, num_workers=0
     )
-    dg_val   = DatasetClass(start=int(np.ceil(T_dur*train_frac)), 
-                            end=int(np.ceil(T_dur*(train_frac+validation_frac))),
+    dg_val   = DatasetClass(start=spin_up+int(np.floor(T_dur*train_frac)), 
+                            end=spin_up+int(np.ceil(T_dur*(train_frac+validation_frac)))-np.max(offset),
                             **dg_dict)
+    print('len dg_val', len(dg_val))
     validation_loader = torch.utils.data.DataLoader(
         dg_val, batch_size=batch_size, drop_last=False, num_workers=0
     )
