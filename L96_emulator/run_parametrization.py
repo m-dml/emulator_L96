@@ -204,7 +204,7 @@ def setup_parametrization(conf_exp=None):
 
     p.add_argument('--K', type=int, required=True, help='number of slow variables (grid cells)')
     p.add_argument('--J', type=int, required=True, help='number of fast variables (vertical levels)')
-    p.add_argument('--T', type=int, required=True, help='length of simulation data (in time units [s])')
+    p.add_argument('--T', type=float, required=True, help='length of simulation data (in time units [s])')
     p.add_argument('--dt', type=float, required=True, help='simulation step length (in time units [s])')
     p.add_argument('--spin_up_time', type=float, default=5., help='spin-up time for simulation in [s]')
     p.add_argument('--train_frac', type=float, default=0.8, help='fraction of data data for training')
