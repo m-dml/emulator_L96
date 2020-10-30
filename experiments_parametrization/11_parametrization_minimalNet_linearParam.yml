@@ -15,7 +15,7 @@ spin_up_time: 5.
 model_exp_id: 42
 model_forwarder: rk4_default
 loss_fun: mse
-batch_size: 30
+batch_size: 32
 lr: 1e-3
 lr_min: 1e-6
 lr_decay: 0.1
@@ -23,5 +23,5 @@ weight_decay: 0.
 max_lr_patience: 10
 max_patience: 20
 eval_every: 10
-max_epochs: 500
+max_epochs: 5000
 offset: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50]
