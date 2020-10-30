@@ -9,8 +9,8 @@ l96_F: 10.
 l96_h: 1.
 l96_b: 10.
 l96_c: 10.
-train_frac: 0.8
-validation_frac: 0.1
+train_frac: 0.5
+validation_frac: 0.5
 spin_up_time: 5.
 model_exp_id: 42
 model_forwarder: rk4_default
