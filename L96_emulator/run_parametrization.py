@@ -140,7 +140,7 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
         'normalize' : False
     }
 
-    dg_train = DatasetClass(start=spin_up, end=spin_up+int(np.floor(T_dur*train_frac)), **dg_dict)
+    dg_train = DatasetClass(start=spin_up, end=spin_up+int(np.floor(T_dur*train_frac))-np.max(offset), **dg_dict)
     train_loader = torch.utils.data.DataLoader(
         dg_train, batch_size=batch_size, drop_last=True, num_workers=0
     )
