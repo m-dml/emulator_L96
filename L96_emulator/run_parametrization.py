@@ -118,8 +118,9 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
         return x
 
     T_dur = int(T/dt)
+    spin_up = int(spin_up_time/dt)
     print('simulating high-res (two-level L96) data')
-    data_full = model_simulate(y0=sortL96intoChannels(X_init,J=J), dy0=None, n_steps=T_dur)
+    data_full = model_simulate(y0=sortL96intoChannels(X_init,J=J), dy0=None, n_steps=T_dur+spin_up)
     print('full data shape: ', data_full.shape)
 
     # two-level simulates for fast and slow variables, we only take the slow ones for training !
@@ -131,7 +132,6 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     print('dataset class', DatasetClass)
     print('len(offset)', len(offset))
     assert train_frac + validation_frac <= 1.
-    spin_up = int(spin_up_time/dt)
     
     dg_dict = {
         'data' : data,
@@ -140,7 +140,7 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
         'normalize' : False
     }
 
-    dg_train = DatasetClass(start=spin_up, end=int(np.floor(T_dur*train_frac)), **dg_dict)
+    dg_train = DatasetClass(start=spin_up, end=spin_up+int(np.floor(T_dur*train_frac)), **dg_dict)
     train_loader = torch.utils.data.DataLoader(
         dg_train, batch_size=batch_size, drop_last=True, num_workers=0
     )
