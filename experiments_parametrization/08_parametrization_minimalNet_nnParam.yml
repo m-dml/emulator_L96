@@ -23,7 +23,7 @@ weight_decay: 0.
 max_lr_patience: 10
 max_patience: 20
 eval_every: 10
-max_epochs: 50
+max_epochs: 500
 parametrization: nn
 n_hiddens: [32, 32]
 offset: [10,20,30,40,50]

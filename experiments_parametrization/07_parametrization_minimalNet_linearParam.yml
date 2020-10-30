@@ -23,5 +23,5 @@ weight_decay: 0.
 max_lr_patience: 10
 max_patience: 20
 eval_every: 10
-max_epochs: 50
+max_epochs: 500
 offset: [10,20,30,40,50]
