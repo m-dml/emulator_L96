@@ -16,27 +16,18 @@ def mkdir_from_path(dir):
         os.mkdir(dir)
 
 def sel_dataset_class(prediction_task, N_trials, local, offset=[1]):
-
+    # N_trials no longer queried - always use multiTrial class even if N_trial=1
     assert prediction_task in ['state']
-    if N_trials==1:
+    if local:
         if len(offset) > 1:
-            DatasetClass = DatasetMultiStep
+            raise NotImplementedError()
         else:
-            DatasetClass = Dataset
-
-    elif N_trials>1:
-        if local:
-            if len(offset) > 1:
-                raise NotImplementedError()
-            else:
-                DatasetClass = DatasetMultiTrial_shattered
-        else:
-            if len(offset) > 1:
-                DatasetClass = DatasetMultiTrialMultiStep                
-            else:
-                DatasetClass = DatasetMultiTrial
+            DatasetClass = DatasetMultiTrial_shattered
     else:
-        raise NotImplementedError()
+        if len(offset) > 1:
+            DatasetClass = DatasetMultiTrialMultiStep                
+        else:
+            DatasetClass = DatasetMultiTrial
 
     return DatasetClass
 
