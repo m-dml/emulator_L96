@@ -21,7 +21,7 @@ lr: 1e-3
 lr_min: 1e-10
 lr_decay: 0.1
 weight_decay: 0.
-max_lr_patience: 50
+max_lr_patience: 10
 max_patience: 50
 eval_every: 200
 max_epochs: 10000
