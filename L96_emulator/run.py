@@ -51,10 +51,7 @@ def run_exp(exp_id, datadir, res_dir,
     fetch_commit.kill()
 
     # load data    
-    if N_trials > 1:
-        fn_data = f'out_K{K}_J{J}_T{T}_N{N_trials}_dt0_{str(dt)[2:]}'
-    else:
-        fn_data = f'out_K{K}_J{J}_T{T}_dt0_{str(dt)[2:]}'
+    fn_data = f'out_K{K}_J{J}_T{T}_N{N_trials}_dt0_{str(dt)[2:]}'
     out = np.load(datadir + fn_data + '.npy')
     print('data.shape', out.shape)
     assert (out.shape[1]-1)*dt == T
