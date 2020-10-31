@@ -15,7 +15,7 @@ def mkdir_from_path(dir):
     if not os.path.exists(dir):
         os.mkdir(dir)
 
-def sel_dataset_class(prediction_task, N_trials, local, offset=1):
+def sel_dataset_class(prediction_task, N_trials, local, offset=[1]):
 
     assert prediction_task in ['state']
     if N_trials==1:
