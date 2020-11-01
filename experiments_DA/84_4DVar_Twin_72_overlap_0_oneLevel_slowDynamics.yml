@@ -1,14 +1,14 @@
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
-exp_id: 4DVar_oneLevelK40_deepEmulator_Twin_72_N01_overlap_0_long_B1_0_slowDynamics
+exp_id: 4DVar_oneLevelK40_deepEmulator_Twin_64_N01_overlap_0_long_B1_0_slowDynamics
 K : 40
 J : 0
 T : 150
 dt : 0.0125
 N_trials : 5
 spin_up_time : 50.
-T_win: 72
-T_shift: 72
+T_win: 64
+T_shift: 64
 B: 1.
 l96_F : 8.
 l96_h : 1.
