@@ -1,0 +1,29 @@
+datadir: /gpfs/work/nonnenma/data/emulators/L96/
+res_dir: /gpfs/work/nonnenma/results/emulators/L96/
+exp_id: 4DVar_oneLevelK40_deepEmulator_Twin_64_N01_overlap_0_long_B1_0
+K : 40
+J : 0
+T : 150
+dt : 0.05
+N_trials : 5
+spin_up_time : 50.
+T_win: 64
+T_shift: 64
+B: 1.
+l96_F : 8.
+l96_h : 1.
+l96_b : 10.
+l96_c : 10.
+obs_operator : ObsOp_rotsampleGaussian 
+obs_operator_sig2 : 1.0
+obs_operator_frq : 4
+model_exp_id : 77
+model_forwarder : rk4_default
+optimizer : LBFGS
+n_steps : 5
+lr : 1e0
+max_iter : 1000
+max_eval : -1
+tolerance_grad : 1e-12
+tolerance_change : 1e-12
+history_size: 10
