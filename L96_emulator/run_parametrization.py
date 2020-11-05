@@ -11,13 +11,63 @@ from L96_emulator.likelihood import GenModel, ObsOp_identity, SimplePrior
 from L96sim.L96_base import f1, f2, pf2
 from configargparse import ArgParser
 import subprocess
+import copy
 
 import os
 def mkdir_from_path(dir):
     '''make a directory (dir) if it doesn't exist'''
     if not os.path.exists(dir):
         os.mkdir(dir)
+        
+class Dataset_offline(torch.utils.data.IterableDataset):
+    def __init__(self, data, 
+                 start=None, end=None, 
+                 randomize_order=True):
 
+        assert len(data) == 2
+        self.X = data[0]
+        self.y = data[1]
+        assert len(self.X) == len(self.Y)
+        
+        if start is None or end is None:
+            start, end = 0,  self.data.shape[0]-self.offset
+        assert end > start
+        self.start, self.end = start, end
+
+        self.randomize_order = randomize_order
+
+    def __getitem__(self, index):
+        """ Generate one batch of data """
+        idx = np.atleast_1d(np.asarray(index))
+        return self.X[idx], self.y[idx]
+
+    def __iter__(self):
+        """ Return iterable over data in random order """
+        iter_start, iter_end = self.divide_workers()
+        if self.randomize_order:
+            idx = torch.randperm(iter_end - iter_start, device='cpu') + iter_start
+        else: 
+            idx = torch.arange(iter_start, iter_end, requires_grad=False, device='cpu')
+
+        X = self.X[idx,:]
+        y = self.y[idx,:]
+
+        return zip(X, y)
+
+    def __len__(self):
+        return (self.end - self.start) #self.data.shape[0]
+
+    def divide_workers(self):
+        """ parallelized data loading via torch.util.data.Dataloader """
+        if torch.utils.data.get_worker_info() is None:
+            iter_start = torch.tensor(self.start, requires_grad=False, dtype=torch.int, device='cpu')
+            iter_end = torch.tensor(self.end, requires_grad=False, dtype=torch.int, device='cpu')
+        else: 
+            raise NotImplementedError('had no need for parallelization yet')
+
+        return iter_start, iter_end
+
+        
 def run_exp_parametrization(exp_id, datadir, res_dir,
             parametrization, n_hiddens,
             K, J, T, dt, spin_up_time, l96_F, l96_h, l96_b, l96_c, train_frac, validation_frac, offset,
@@ -46,10 +96,13 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     
     # instantiate parametrizations
     if parametrization == 'linear':
-        param_train = Parametrization_lin(a=as_tensor(np.array([-0.75])), b=as_tensor(np.array([-0.4])))    
-        param_train = Parametrization_lin(a=as_tensor(np.array([-0.75])), b=as_tensor(np.array([-0.4])))    
+        param_train = Parametrization_lin(a=as_tensor(np.array([-0.75])), b=as_tensor(np.array([-0.4])))
+        param_offline = Parametrization_lin(a=as_tensor(np.array([-0.75])), b=as_tensor(np.array([-0.4])))
     elif parametrization == 'nn':
-        param_train = Parametrization_nn(n_hiddens=n_hiddens)    
+        param_train = Parametrization_nn(n_hiddens=n_hiddens)
+        param_offline = Parametrization_nn(n_hiddens=n_hiddens)
+        # make sure they share initialization:
+        param_offline.load_state_dict(copy.deepcopy(param_train.state_dict()))
     else:
         raise NotImplementedError()
     for p in model.parameters():
@@ -127,6 +180,52 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     data = data_full[:,0,:] 
     print('training data shape: ', data_full.shape)
 
+
+    # offline training of parametrization
+
+    print('offline training')
+    dg_train = Dataset_offline(X=data[:,0,:], y=data[:,1:,:].mean(axis=1), start=spin_up, 
+                               end=spin_up+int(np.floor(T_dur*train_frac))-np.max(offset))
+    print('len dg_train', len(dg_train))
+    train_loader = torch.utils.data.DataLoader(
+        dg_train, batch_size=batch_size, drop_last=True, num_workers=0
+    )
+    dg_val   = Dataset_offline(X=data[:,0,:], y=data[:,1:,:].mean(axis=1), 
+                            end=spin_up+int(np.ceil(T_dur*(train_frac+validation_frac)))-np.max(offset))
+    print('len dg_val', len(dg_val))
+    validation_loader = torch.utils.data.DataLoader(
+        dg_val, batch_size=batch_size, drop_last=False, num_workers=0
+    )
+
+    loss_fun = loss_function(loss_fun=loss_fun, extra_args={})
+    print('starting optimization of parametrization')
+    training_outputs = train_model(
+        model=param_offline,
+        train_loader=train_loader, 
+        validation_loader=validation_loader, 
+        device=device, 
+        model_forward=param_offline, 
+        loss_fun=loss_fun,
+        lr=lr,
+        lr_min=lr_min, 
+        lr_decay=lr_decay, 
+        weight_decay=weight_decay,
+        max_epochs=max_epochs,
+        max_patience=max_patience, 
+        max_lr_patience=max_lr_patience, 
+        eval_every=eval_every
+    )
+
+    if parametrization == 'linear':
+        print('learned a', param_offline.a)
+        print('learned b', param_offline.b)
+    elif parametrization == 'nn':
+        print('initialized first-layer weights', param_offline.layers[0].weight)
+
+
+    # online training of parametrization
+
+    print('online training')
     DatasetClass = sel_dataset_class(prediction_task='state', N_trials=1, local=False, offset=offset)
     print('dataset class', DatasetClass)
     print('len(offset)', len(offset))
@@ -186,11 +285,16 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     for key, value in state_dict.items():
         state_dict[key] = value.detach().cpu().numpy()
 
+    state_dict_offline = param_offline.state_dict()
+    for key, value in state_dict_offline.items():
+        state_dict_offline[key] = value.detach().cpu().numpy()
+
     np.save(res_dir + save_dir + 'out', 
             {
                 'data_full' : data_full,
                 'X_init' : data_full[-1].reshape(1,-1),
-                'param_train_state_dict' : state_dict
+                'param_train_state_dict' : state_dict,
+                'param_offline_state_dict' : state_dict_offline
             })
     print('done')
 
