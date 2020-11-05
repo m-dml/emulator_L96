@@ -180,14 +180,16 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     # offline training of parametrization
 
     print('offline training')
-    dg_train = Dataset_offline(data=(data_full[:,0,:], data_full[:,1:,:].mean(axis=1)), 
+    X = sortL96intoChannels(data_full[:,0,:],J=model_pars['J_net'])
+    y = sortL96intoChannels(data_full[:,1:,:].mean(axis=1), J=model_pars['J_net'])
+    dg_train = Dataset_offline(data=(X,y), 
                                start=spin_up, 
                                end=spin_up+int(np.floor(T_dur*train_frac))-np.max(offset))
     print('len dg_train', len(dg_train))
     train_loader = torch.utils.data.DataLoader(
         dg_train, batch_size=batch_size, drop_last=True, num_workers=0
     )
-    dg_val   = Dataset_offline(data=(data_full[:,0,:], data_full[:,1:,:].mean(axis=1)), 
+    dg_val   = Dataset_offline(data=(X,y), 
                                start=spin_up+int(np.floor(T_dur*train_frac)), 
                                end=spin_up+int(np.ceil(T_dur*(train_frac+validation_frac)))-np.max(offset))
     print('len dg_val', len(dg_val))
