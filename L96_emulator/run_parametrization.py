@@ -27,10 +27,10 @@ class Dataset_offline(torch.utils.data.IterableDataset):
         assert len(data) == 2
         self.X = data[0]
         self.y = data[1]
-        assert len(self.X) == len(self.Y)
+        assert len(self.X) == len(self.y)
         
         if start is None or end is None:
-            start, end = 0,  self.data.shape[0]-self.offset
+            start, end = 0,  self.X.shape[0]-self.offset
         assert end > start
         self.start, self.end = start, end
 
@@ -176,36 +176,33 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     data_full = model_simulate(y0=sortL96intoChannels(X_init,J=J), dy0=None, n_steps=T_dur+spin_up)
     print('full data shape: ', data_full.shape)
 
-    # two-level simulates for fast and slow variables, we only take the slow ones for training !
-    data = data_full[:,0,:] 
-    print('training data shape: ', data_full.shape)
-
 
     # offline training of parametrization
 
     print('offline training')
-    dg_train = Dataset_offline(X=data[:,0,:], y=data[:,1:,:].mean(axis=1), start=spin_up, 
+    dg_train = Dataset_offline(data=(data_full[:,0,:], data_full[:,1:,:].mean(axis=1)), 
+                               start=spin_up, 
                                end=spin_up+int(np.floor(T_dur*train_frac))-np.max(offset))
     print('len dg_train', len(dg_train))
     train_loader = torch.utils.data.DataLoader(
         dg_train, batch_size=batch_size, drop_last=True, num_workers=0
     )
-    dg_val   = Dataset_offline(X=data[:,0,:], y=data[:,1:,:].mean(axis=1), 
-                            end=spin_up+int(np.ceil(T_dur*(train_frac+validation_frac)))-np.max(offset))
+    dg_val   = Dataset_offline(data=(data_full[:,0,:], data_full[:,1:,:].mean(axis=1)), 
+                               start=spin_up+int(np.floor(T_dur*train_frac)), 
+                               end=spin_up+int(np.ceil(T_dur*(train_frac+validation_frac)))-np.max(offset))
     print('len dg_val', len(dg_val))
     validation_loader = torch.utils.data.DataLoader(
         dg_val, batch_size=batch_size, drop_last=False, num_workers=0
     )
 
-    loss_fun = loss_function(loss_fun=loss_fun, extra_args={})
     print('starting optimization of parametrization')
-    training_outputs = train_model(
+    training_outputs_offline = train_model(
         model=param_offline,
         train_loader=train_loader, 
         validation_loader=validation_loader, 
         device=device, 
         model_forward=param_offline, 
-        loss_fun=loss_fun,
+        loss_fun=loss_function(loss_fun=loss_fun, extra_args={}),
         lr=lr,
         lr_min=lr_min, 
         lr_decay=lr_decay, 
@@ -226,6 +223,11 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     # online training of parametrization
 
     print('online training')
+    # two-level simulates for fast and slow variables, we only take the slow ones for training !
+    data = data_full[:,0,:]
+    data = data.reshape(1, *data.shape) # N x T x K*(J+1)
+    print('training data shape: ', data_full.shape)
+
     DatasetClass = sel_dataset_class(prediction_task='state', N_trials=1, local=False, offset=offset)
     print('dataset class', DatasetClass)
     print('len(offset)', len(offset))
@@ -251,7 +253,6 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
         dg_val, batch_size=batch_size, drop_last=False, num_workers=0
     )
 
-    loss_fun = loss_function(loss_fun=loss_fun, extra_args={})
     print('starting optimization of parametrization')
     training_outputs = train_model(
         model=model_forwarder_parametrized,
@@ -259,7 +260,7 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
         validation_loader=validation_loader, 
         device=device, 
         model_forward=model_forwarder_parametrized, 
-        loss_fun=loss_fun,
+        loss_fun=loss_function(loss_fun=loss_fun, extra_args={}),
         lr=lr,
         lr_min=lr_min, 
         lr_decay=lr_decay, 
