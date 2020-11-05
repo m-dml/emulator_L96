@@ -181,7 +181,7 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
 
     print('offline training')
     X = sortL96intoChannels(data_full[:,0,:],J=model_pars['J_net'])
-    y = sortL96intoChannels(data_full[:,1:,:].mean(axis=1), J=model_pars['J_net'])
+    y = l96_h * l96_c * sortL96intoChannels(data_full[:,1:,:].mean(axis=1), J=model_pars['J_net'])
     dg_train = Dataset_offline(data=(X,y), 
                                start=spin_up, 
                                end=spin_up+int(np.floor(T_dur*train_frac))-np.max(offset))
