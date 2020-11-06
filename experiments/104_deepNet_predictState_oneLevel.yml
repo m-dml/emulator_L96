@@ -23,8 +23,8 @@ lr_decay: 0.1
 weight_decay: 0.
 max_lr_patience: 10
 max_patience: 50
-eval_every: 2000
-max_epochs: 5000
+eval_every: 200
+max_epochs: 10000
 model_name: TinyNetwork
 filters: [16, 32]
 filters_ks1_inter: [32, 32, 32]
