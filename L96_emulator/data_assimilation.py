@@ -640,7 +640,7 @@ def get_model(model_pars, res_dir, exp_dir=''):
     else:
 
         exp_names = os.listdir(exp_dir + 'experiments/')
-        conf_exp = exp_names[np.where(np.array([name[:2] for name in exp_names])==str(model_pars['exp_id']))[0][0]][:-4]
+        conf_exp = exp_names[np.where(np.array([name.split('_')[0] for name in exp_names])==str(model_pars['exp_id']))[0][0]][:-4]
         print('conf_exp', conf_exp)
 
         # ### pick a (trained) emulator
