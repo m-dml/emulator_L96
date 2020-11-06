@@ -1,4 +1,4 @@
-exp_id: parametrization_deepNet_nnParam_fastDynamics_T5_nrollout10
+exp_id: parametrization_deepNet_nnParam_T05_nrollout10_cheaperNet
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
 K: 36
@@ -12,7 +12,7 @@ l96_c: 10.
 train_frac: 0.8
 validation_frac: 0.2
 spin_up_time: 5.
-model_exp_id: 103
+model_exp_id: 104
 model_forwarder: rk4_default
 loss_fun: mse
 batch_size: 32

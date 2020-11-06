@@ -1,4 +1,4 @@
-exp_id: parametrization_deepNet_nnParam_fastDynamics_T5_nrollout10
+exp_id: parametrization_deepNet_nnParam_T05_nrollout10
 datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
 K: 36
