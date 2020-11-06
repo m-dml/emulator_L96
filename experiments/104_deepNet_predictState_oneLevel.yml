@@ -3,7 +3,7 @@ datadir: /gpfs/work/nonnenma/data/emulators/L96/
 res_dir: /gpfs/work/nonnenma/results/emulators/L96/
 K: 36
 J: 0
-T: 65
+T: 17
 dt: 0.01
 N_trials: 1
 normalize_data: 0
