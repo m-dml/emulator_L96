@@ -1,4 +1,5 @@
 import numpy as np
+from L96_emulator.networks import setup_conv
 import torch
 
 class Parametrized_twoLevel_L96(torch.nn.Module):
@@ -30,7 +31,7 @@ class Parametrization_lin(torch.nn.Module):
 
 class Parametrization_nn(torch.nn.Module):
     
-    def __init__(self, n_hiddens, n_in=1, n_out=1):
+    def __init__(self, n_hiddens, n_in=1, n_out=1, kernel_size=1):
 
         super(Parametrization_nn, self).__init__()
 
@@ -38,7 +39,8 @@ class Parametrization_nn(torch.nn.Module):
         n_units = n_hiddens + [n_out]
         for n in n_units:
             layers.append(
-                torch.nn.Conv1d(n_in, n, kernel_size=1, bias=True)
+                setup_conv(n_in, n, kernel_size=kernel_size, bias=True, padding_mode='circular')
+                #torch.nn.Conv1d(n_in, n, kernel_size=1, bias=True)
                 #torch.nn.Linear(n_in, n, bias=True)
             )
             n_in = n

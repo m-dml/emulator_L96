@@ -69,7 +69,7 @@ class Dataset_offline(torch.utils.data.IterableDataset):
 
         
 def run_exp_parametrization(exp_id, datadir, res_dir,
-            parametrization, n_hiddens,
+            parametrization, n_hiddens, kernel_size,
             K, J, T, dt, spin_up_time, l96_F, l96_h, l96_b, l96_c, train_frac, validation_frac, offset,
             model_exp_id, model_forwarder, loss_fun, batch_size, eval_every,
             lr, lr_min, lr_decay, weight_decay, max_epochs, max_patience, max_lr_patience):
@@ -99,8 +99,8 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
         param_train = Parametrization_lin(a=as_tensor(np.array([-0.75])), b=as_tensor(np.array([-0.4])))
         param_offline = Parametrization_lin(a=as_tensor(np.array([-0.75])), b=as_tensor(np.array([-0.4])))
     elif parametrization == 'nn':
-        param_train = Parametrization_nn(n_hiddens=n_hiddens)
-        param_offline = Parametrization_nn(n_hiddens=n_hiddens)
+        param_train = Parametrization_nn(n_hiddens=n_hiddens, kernel_size=kernel_size)
+        param_offline = Parametrization_nn(n_hiddens=n_hiddens, kernel_size=kernel_size)
         # make sure they share initialization:
         param_offline.load_state_dict(copy.deepcopy(param_train.state_dict()))
     else:
@@ -175,7 +175,7 @@ def run_exp_parametrization(exp_id, datadir, res_dir,
     print('simulating high-res (two-level L96) data')
     data_full = model_simulate(y0=sortL96intoChannels(X_init,J=J), dy0=None, n_steps=T_dur+spin_up)
     print('full data shape: ', data_full.shape)
-
+    assert np.all(np.isfinite(data_full))
 
     # offline training of parametrization
 
@@ -330,6 +330,7 @@ def setup_parametrization(conf_exp=None):
     p.add_argument('--model_forwarder', type=str, default='rk4_default', help='string for model forwarder (e.g. RK4)')
     p.add_argument('--parametrization', type=str, default='linear', help='string specifying parametrization model')
     p.add_argument('--n_hiddens', type=int, nargs='+',  default=[32,32], help='string specifying layers of NN parametrization')
+    p.add_argument('--kernel_size', type=int, default=1, help='kernel size for conv layers of NN parametrization')
 
     p.add_argument('--loss_fun', type=str, default='mse', help='loss function for model training')    
     p.add_argument('--batch_size', type=int, default=32, help='batch-size')
