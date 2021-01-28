@@ -442,12 +442,11 @@ class TinyNetwork(torch.nn.Module):
                 break
 
             n_out = n_filters_ks3[i]
-            layer = PeriodicConv1D(in_channels = n_in, 
-                                   out_channels = n_out, 
-                                   kernel_size = kernel_size, 
-                                   padding = kernel_size, 
-                                   bias = True, 
-                                   padding_mode = padding_mode)
+            layer = setup_conv(in_channels = n_in, 
+                               out_channels = n_out, 
+                               kernel_size = kernel_size, 
+                               bias = True, 
+                               padding_mode = padding_mode)
             self.layers3x3.append(layer)
             n_in = n_out
             
