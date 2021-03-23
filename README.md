@@ -1,4 +1,4 @@
-# Code for Deep Emulators for Differentiation, Forecasting andParametrization in Earth Science Simulators
+# Code for Deep Emulators for Differentiation, Forecasting and Parametrization in Earth Science Simulators
 
 This repository contains pytorch code for defininig and training emulators on the [Lorenz-96 model](https://en.wikipedia.org/wiki/Lorenz_96_model) commonly used as a simple model for chaotic atmospheric dynamics.
 
