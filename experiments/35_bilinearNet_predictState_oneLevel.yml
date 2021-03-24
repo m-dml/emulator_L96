@@ -5,7 +5,7 @@ K: 40
 J: 0
 T: 605
 dt: 0.05
-N_trials: 1000
+N_trials: 1
 normalize_data: 0
 prediction_task: state
 lead_time: 1
