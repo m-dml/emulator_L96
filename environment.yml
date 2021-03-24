@@ -1,0 +1,22 @@
+# Create:
+# $ conda env create --prefix .emulator_L96_env --file environment.yml
+#
+# Update:
+# $ conda env update --prefix .emulator_L96_env --file environment.yml --prune
+#
+# Activate:
+# $ conda activate ~/path/to/emulator_L96/.emulator_L96_env
+#
+name: emulator_L96_env
+
+channels:
+  - conda-forge
+  - pytorch
+
+dependencies:
+  - jupyter
+  - matplotlib
+  - notebook
+  - "python >= 3.6.0"
+  - "pytorch >= 1.8.0"
+  - scipy
