@@ -1,8 +1,17 @@
 Full list of experiments for manuscript results and figures: 
 
-root/experiments: Network-training experiments
+exp_id numbers refer to the leading digits of the enumerated .yml files found
+in root/experiments, root/experiments_DA and root/experiments_parametrization.
+
+exp_id folder names refer to the name of the folder containing the experiment 
+results in root/results/emulators/L96/models/*exp_id folder name*
+
+##################################################
+# root/experiments: Network-training experiments #
+##################################################
 
 Training of deepNets on K=40, F=8 and different dataset sizes N :
+- Resilts for evluation of emulators (Fig. 2), but some networks used throughout the study!
 
 exp_id number # exp_id folder name
 
@@ -22,7 +31,10 @@ exp_id number # exp_id folder name
 87 # deepNet_predictState_J_initRand_RK_multiTrial10_seed2
 88 # deepNet_predictState_J_initRand_RK_multiTrial10_seed3
 
+
+
 Local training of cheap emulators on parts of whole space with in total K = 640 :
+- Provides results for local training of emulators (Fig. A3).
 
 exp_id folder name:
 minimalNet_predictState_J_initRand_RK_multiTrial_thorough_local***_bs**
@@ -45,18 +57,26 @@ exp_id number # batch-size, local region size
 63 # bs=64, K_local=40
 64 # bs=64, K_local=10
 
+
+
 Training of deepNet on K=36, F=10, dt=0.01, N=1200 for parametrization learning:
+- Provides emulator for parametrization learning (Fig. 4).
 
 exp_id number # exp_id folder name
 104 # deepNet_predictState_J_K36_initRand_RK_multiTrial01
 
+
+
 Dummy ‘training’ file for bilinear network with analytic weights (notice learning rate = 0.):
+- Bilinear network with analytical parameters acts as ground-truth L96 implementation in pytorch.  
 
 exp_id number # exp_id folder name
 35 # bilinearNet_predictState_J_analytic_RK_multiTrial_thorough_local
 
 
+
 Training of small networks (bilinearNet, squareNet) on K=40, F=8 and various dataset sizes N:
+- Results for problem-tailored neural netwoks (Fig. A2).
 
 exp_id number # exp_id folder name
 75 # minimalNet_predictState_J_initRand_RK_multiTrial01
@@ -66,22 +86,13 @@ exp_id number # exp_id folder name
 73 # bilinearNet_predictState_J_initRand_RK_multiTrial1
 70 # bilinearNet_predictState_J_initRand_RK_multiTrial10
 
+######################################################
+# root/experiments_DA: Data Assimilation experiments #
+######################################################
 
-root/experiments_DA: Data Assimilation experiments
+Provide results of Data Assimilation with emulators (Fig. 3). 
 
-exp_id folder name
-4DVar_oneLevelK40_analyticEmulator_Twin_**_overlap_0_long_B1_0_slowDynamics
-
-exp_id number # integration window length (in steps)
-76 # Twin=8,  
-72 # Twin=16
-68 # Twin=24
-64 # Twin=32
-60 # Twin=40
-56 # Twin=48
-52 # Twin=56
-48 # Twin=64 
-80 # Twin=72
+Experiments with trained emulator:
 
 exp_id folder name
 4DVar_oneLevelK40_deepEmulator_Twin_**_N01_overlap_0_long_B1_0_slowDynamics
@@ -97,7 +108,30 @@ exp_id number # integration window length (in steps)
 84 # Twin=64
 85 # Twin=72
 
-root/experiments_parametrization: Parametrization learning experiments
+Experiments with true Lorenz-96 model (here: bilinear network with analytic weights):
+
+exp_id folder name
+4DVar_oneLevelK40_analyticEmulator_Twin_**_overlap_0_long_B1_0_slowDynamics
+
+exp_id number # integration window length (in steps)
+76 # Twin=8,  
+72 # Twin=16
+68 # Twin=24
+64 # Twin=32
+60 # Twin=40
+56 # Twin=48
+52 # Twin=56
+48 # Twin=64 
+80 # Twin=72
+
+
+
+##########################################################################
+# root/experiments_parametrization: Parametrization learning experiments #
+##########################################################################
+
+
+Provides final results of Parametrization learning with emulators (Fig. 4). 
 
 exp_id number # exp_id folder name
 22 # parametrization_deepNet_nnParam_fastDynamics_T5_nrollout10_cheaperNet
