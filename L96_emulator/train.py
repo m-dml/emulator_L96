@@ -64,7 +64,7 @@ def train_model(model, train_loader, validation_loader, device, model_forward, l
     def lr_setter(lr):
         optimizer.param_groups[0]['lr'] = lr
 
-    n_batches = len(train_loader) // train_loader.batch_size
+    n_batches = len(train_loader)
     if not train_loader.drop_last and len(train_loader) > n_batches * train_loader.batch_size:
         n_batches += 1
     eval_every = n_batches if eval_every is None else eval_every
