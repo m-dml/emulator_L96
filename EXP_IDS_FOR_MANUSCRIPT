@@ -1,0 +1,103 @@
+Full list of experiments for manuscript results and figures: 
+
+root/experiments: Network-training experiments
+
+Training of deepNets on K=40, F=8 and different dataset sizes N :
+
+exp_id number # exp_id folder name
+
+77 # deepNet_predictState_J_initRand_RK_multiTrial01 *best of three seeds
+85 # deepNet_predictState_J_initRand_RK_multiTrial01_seed2
+86 # deepNet_predictState_J_initRand_RK_multiTrial01_seed3
+
+97 # deepNet_predictState_J_initRand_RK_multiTrial07  *best of three seeds
+98 # deepNet_predictState_J_initRand_RK_multiTrial07_seed2
+99 # deepNet_predictState_J_initRand_RK_multiTrial07_seed3
+
+74 # deepNet_predictState_J_initRand_RK_multiTrial1
+89 # deepNet_predictState_J_initRand_RK_multiTrial1_seed2
+90 # deepNet_predictState_J_initRand_RK_multiTrial1_seed3 * best of three seeds
+
+71 # deepNet_predictState_J_initRand_RK_multiTrial10 * best of three seeds
+87 # deepNet_predictState_J_initRand_RK_multiTrial10_seed2
+88 # deepNet_predictState_J_initRand_RK_multiTrial10_seed3
+
+Local training of cheap emulators on parts of whole space with in total K = 640 :
+
+exp_id folder name:
+minimalNet_predictState_J_initRand_RK_multiTrial_thorough_local***_bs**
+
+exp_id number # batch-size, local region size
+49 # bs=1, K_local=640
+50 # bs=1, K_local=160
+51 # bs=1, K_local=40
+52 # bs=1, K_local=10
+53 # bs=4, K_local=640
+54 # bs=4, K_local=160
+55 # bs=4, K_local=40
+56 # bs=4, K_local=10
+57 # bs=16, K_local=640
+58 # bs=16, K_local=160
+59 # bs=16, K_local=40
+60 # bs=16, K_local=10
+61 # bs=64, K_local=640
+62 # bs=64, K_local=160
+63 # bs=64, K_local=40
+64 # bs=64, K_local=10
+
+Training of deepNet on K=36, F=10, dt=0.01, N=1200 for parametrization learning:
+
+exp_id number # exp_id folder name
+104 # deepNet_predictState_J_K36_initRand_RK_multiTrial01
+
+Dummy ‘training’ file for bilinear network with analytic weights (notice learning rate = 0.):
+
+exp_id number # exp_id folder name
+35 # bilinearNet_predictState_J_analytic_RK_multiTrial_thorough_local
+
+
+Training of small networks (bilinearNet, squareNet) on K=40, F=8 and various dataset sizes N:
+
+exp_id number # exp_id folder name
+75 # minimalNet_predictState_J_initRand_RK_multiTrial01
+72 # minimalNet_predictState_J_initRand_RK_multiTrial1
+69 # minimalNet_predictState_J_initRand_RK_multiTrial10
+76 # bilinearNet_predictState_J_initRand_RK_multiTrial01
+73 # bilinearNet_predictState_J_initRand_RK_multiTrial1
+70 # bilinearNet_predictState_J_initRand_RK_multiTrial10
+
+
+root/experiments_DA: Data Assimilation experiments
+
+exp_id folder name
+4DVar_oneLevelK40_analyticEmulator_Twin_**_overlap_0_long_B1_0_slowDynamics
+
+exp_id number # integration window length (in steps)
+76 # Twin=8,  
+72 # Twin=16
+68 # Twin=24
+64 # Twin=32
+60 # Twin=40
+56 # Twin=48
+52 # Twin=56
+48 # Twin=64 
+80 # Twin=72
+
+exp_id folder name
+4DVar_oneLevelK40_deepEmulator_Twin_**_N01_overlap_0_long_B1_0_slowDynamics
+
+exp_id number # integration window length (in steps)
+92 # Twin=8
+91 # Twin=16
+90 # Twin=24
+89 # Twin=32
+88 # Twin=40
+87 # Twin=48
+86 # Twin=56
+84 # Twin=64
+85 # Twin=72
+
+root/experiments_parametrization: Parametrization learning experiments
+
+exp_id number # exp_id folder name
+22 # parametrization_deepNet_nnParam_fastDynamics_T5_nrollout10_cheaperNet
