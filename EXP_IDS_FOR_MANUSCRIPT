@@ -3,6 +3,8 @@ Full list of experiments for manuscript results and figures:
 
 *exp_id numbers* refer to the leading digits of the enumerated .yml files found
 in root/experiments, root/experiments_DA and root/experiments_parametrization.
+exp_id numbers were given to experiments chronologically during the development
+of this repository. 
 
 *exp_id folder names* refer to the name of the folder containing the experiment 
 results in root/results/emulators/L96/models/*exp_id folder name* resp.
