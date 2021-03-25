@@ -17,6 +17,9 @@ dependencies:
   - jupyter
   - matplotlib
   - notebook
+  - pip
+  - configargparse
+  - cudatoolkit
   - "python >= 3.6.0"
   - "pytorch >= 1.8.0"
-  - scipy
+  - "numpy >= 1.19.1"
